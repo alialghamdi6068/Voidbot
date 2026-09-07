@@ -1,1 +1,1 @@
-
+.sidebar{position:fixed;right:0;top:0;bottom:0;width:230px;background:#0e1528;border-left:1px solid #26304a;padding:24px 14px}.brand{font-size:25px;font-weight:800;margin:0 10px 28px}.sidebar a{display:block;padding:12px 14px;border-radius:10px;color:#aeb8d0;margin:5px 0}.sidebar a:hover{background:#17213a;color:#fff}.main{margin-right:230px;padding:35px;max-width:1400px}.sidebar+a{display:block}@media(max-width:700px){.sidebar{position:static;width:auto;border-left:0;border-bottom:1px solid #26304a}.main{margin-right:0;padding:20px}}
