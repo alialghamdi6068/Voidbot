@@ -3,26 +3,47 @@ import threading
 
 import discord
 from discord.ext import commands
-from flask import Flask
 
 from config import BOT_PREFIX, BOT_NAME, HOST, PORT, DISCORD_TOKEN
 from database import init_db
+from web.app import create_app
+
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
+app = create_app(bot)
 
-app = Flask(__name__)
 
-@app.get('/')
-def home():
-    return f'<h1>{BOT_NAME} Dashboard</h1><p>Dashboard is online.</p>'
+@bot.event
+async def on_ready():
+    print(f'[{BOT_NAME}] Logged in as {bot.user} | Guilds: {len(bot.guilds)}')
+    try:
+        synced = await bot.tree.sync()
+        print(f'[{BOT_NAME}] Synced {len(synced)} slash commands.')
+    except Exception as exc:
+        print(f'[{BOT_NAME}] Slash sync failed: {exc}')
 
-@app.get('/health')
-def health():
-    return {'status': 'ok', 'bot_ready': bot.is_ready()}
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, commands.MissingPermissions):
+        return await ctx.reply('❌ ما عندك الصلاحية المطلوبة.')
+    if isinstance(error, commands.BotMissingPermissions):
+        return await ctx.reply('❌ البوت ناقصه صلاحية لتنفيذ الأمر.')
+    if isinstance(error, commands.MissingRequiredArgument):
+        return await ctx.reply(f'❌ ناقصك المتغير: `{error.param.name}`.')
+    if isinstance(error, commands.BadArgument):
+        return await ctx.reply('❌ تأكد من المنشن أو الرقم أو البيانات المدخلة.')
+    print(f'[{BOT_NAME}] Command error: {type(error).__name__}: {error}')
+    try:
+        await ctx.reply('❌ صار خطأ أثناء تنفيذ الأمر.')
+    except discord.HTTPException:
+        pass
 
 
 async def load_cogs():
@@ -34,20 +55,11 @@ async def load_cogs():
     for name in cog_names:
         try:
             await bot.load_extension(f'cogs.{name}')
+            print(f'[{BOT_NAME}] Loaded cogs.{name}')
         except commands.ExtensionNotFound:
-            continue
+            print(f'[{BOT_NAME}] Missing cogs.{name}; skipped.')
         except Exception as exc:
-            print(f'[Flame] Failed to load cogs.{name}: {exc}')
-
-
-@bot.event
-async def on_ready():
-    print(f'[Flame] Logged in as {bot.user} | Guilds: {len(bot.guilds)}')
-    try:
-        synced = await bot.tree.sync()
-        print(f'[Flame] Synced {len(synced)} slash commands.')
-    except Exception as exc:
-        print(f'[Flame] Slash sync failed: {exc}')
+            print(f'[{BOT_NAME}] Failed to load cogs.{name}: {exc}')
 
 
 def run_web():
