@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import render_template, redirect, session, url_for, abort
 from database import get_guild_data, connection
-from web.auth import discord_token
+from web.auth import discord_token, managed_guild_ids
 
 
 def logged_in(fn):
@@ -14,10 +14,17 @@ def logged_in(fn):
 
 
 def manageable_guilds(bot):
-    guilds = []
-    for guild in bot.guilds:
-        guilds.append(guild)
-    return guilds
+    allowed = managed_guild_ids()
+    return [guild for guild in bot.guilds if guild.id in allowed]
+
+
+def require_guild(guild_id, bot):
+    if guild_id not in managed_guild_ids():
+        abort(403)
+    guild = bot.get_guild(guild_id)
+    if not guild:
+        abort(404)
+    return guild
 
 
 def register_dashboard(app, bot):
@@ -35,9 +42,7 @@ def register_dashboard(app, bot):
     @app.get('/dashboard/<int:guild_id>')
     @logged_in
     def dashboard(guild_id):
-        guild = bot.get_guild(guild_id)
-        if not guild:
-            abort(404)
+        guild = require_guild(guild_id, bot)
         with connection() as conn:
             activity_count = conn.execute('SELECT COUNT(*) c FROM activity WHERE guild_id=?', (guild_id,)).fetchone()['c']
             member_levels = conn.execute('SELECT COUNT(*) c FROM levels WHERE guild_id=?', (guild_id,)).fetchone()['c']
@@ -46,19 +51,16 @@ def register_dashboard(app, bot):
     @app.get('/dashboard/<int:guild_id>/settings')
     @logged_in
     def settings(guild_id):
-        guild = bot.get_guild(guild_id)
-        if not guild:
-            abort(404)
-        channels = [c for c in guild.channels if isinstance(c, __import__('discord').TextChannel)]
-        categories = [c for c in guild.categories]
+        guild = require_guild(guild_id, bot)
+        import discord
+        channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
+        categories = list(guild.categories)
         return render_template('settings.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), channels=channels, categories=categories)
 
     @app.get('/dashboard/<int:guild_id>/activity')
     @logged_in
     def activity(guild_id):
-        guild = bot.get_guild(guild_id)
-        if not guild:
-            abort(404)
+        guild = require_guild(guild_id, bot)
         with connection() as conn:
             rows = conn.execute('SELECT * FROM activity WHERE guild_id=? ORDER BY id DESC LIMIT 100', (guild_id,)).fetchall()
         return render_template('activity.html', user=session['user'], guild=guild, rows=rows)
@@ -66,7 +68,5 @@ def register_dashboard(app, bot):
     @app.get('/dashboard/<int:guild_id>/commands')
     @logged_in
     def commands_page(guild_id):
-        guild = bot.get_guild(guild_id)
-        if not guild:
-            abort(404)
+        guild = require_guild(guild_id, bot)
         return render_template('commands.html', user=session['user'], guild=guild)
