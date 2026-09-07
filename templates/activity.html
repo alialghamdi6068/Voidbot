@@ -1,1 +1,1 @@
-
+{% extends 'dashboard.html' %}{% block content %}<div class="top"><div><h1>📋 النشاط</h1><p>آخر 100 حدث في {{ guild.name }}.</p></div></div><div class="card table-wrap"><table><tr><th>الوقت</th><th>الحدث</th><th>التفاصيل</th><th>العضو</th></tr>{% for row in rows %}<tr><td>{{ row['created_at'] }}</td><td>{{ row['action'] }}</td><td>{{ row['details'] }}</td><td>{{ row['user_id'] or '-' }}</td></tr>{% else %}<tr><td colspan="4">لا يوجد نشاط حتى الآن.</td></tr>{% endfor %}</table></div>{% endblock %}
