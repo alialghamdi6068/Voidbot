@@ -1,1 +1,224 @@
+import discord
+from discord import app_commands
+from discord.ext import commands
+from database import connection, log_activity
 
+
+def reason_text(reason: str | None) -> str:
+    return (reason or 'بدون سبب').strip()[:1000]
+
+
+class Moderation(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    async def _ban(self, guild: discord.Guild, member: discord.Member, reason: str):
+        await member.ban(reason=reason)
+        log_activity(guild.id, 'ban', f'{member} | {reason}', member.id)
+
+    async def _kick(self, guild: discord.Guild, member: discord.Member, reason: str):
+        await member.kick(reason=reason)
+        log_activity(guild.id, 'kick', f'{member} | {reason}', member.id)
+
+    async def _timeout(self, guild: discord.Guild, member: discord.Member, minutes: int, reason: str):
+        await member.timeout(discord.utils.utcnow() + discord.timedelta(minutes=minutes), reason=reason)
+        log_activity(guild.id, 'timeout', f'{member} | {minutes}m | {reason}', member.id)
+
+    @commands.command(name='باند')
+    @commands.guild_only()
+    @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
+    async def ban_prefix(self, ctx, member: discord.Member, *, reason: str = 'بدون سبب'):
+        await self._ban(ctx.guild, member, reason_text(reason))
+        await ctx.reply(f'🔨 تم حظر {member.mention}.')
+
+    @app_commands.command(name='ban', description='Ban a member')
+    @app_commands.checks.has_permissions(ban_members=True)
+    async def ban_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
+        await self._ban(interaction.guild, member, reason_text(reason))
+        await interaction.response.send_message(f'🔨 تم حظر {member.mention}.')
+
+    @commands.command(name='طرد')
+    @commands.guild_only()
+    @commands.has_permissions(kick_members=True)
+    @commands.bot_has_permissions(kick_members=True)
+    async def kick_prefix(self, ctx, member: discord.Member, *, reason: str = 'بدون سبب'):
+        await self._kick(ctx.guild, member, reason_text(reason))
+        await ctx.reply(f'👢 تم طرد {member.mention}.')
+
+    @app_commands.command(name='kick', description='Kick a member')
+    @app_commands.checks.has_permissions(kick_members=True)
+    async def kick_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
+        await self._kick(interaction.guild, member, reason_text(reason))
+        await interaction.response.send_message(f'👢 تم طرد {member.mention}.')
+
+    @commands.command(name='تايم')
+    @commands.guild_only()
+    @commands.has_permissions(moderate_members=True)
+    @commands.bot_has_permissions(moderate_members=True)
+    async def timeout_prefix(self, ctx, member: discord.Member, minutes: int, *, reason: str = 'بدون سبب'):
+        if not 1 <= minutes <= 40320:
+            return await ctx.reply('❌ المدة يجب أن تكون بين دقيقة و 28 يوم.')
+        await self._timeout(ctx.guild, member, minutes, reason_text(reason))
+        await ctx.reply(f'⏳ تم إعطاء {member.mention} تايم لمدة **{minutes}** دقيقة.')
+
+    @app_commands.command(name='timeout', description='Timeout a member')
+    @app_commands.checks.has_permissions(moderate_members=True)
+    async def timeout_slash(self, interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = 'بدون سبب'):
+        if not 1 <= minutes <= 40320:
+            return await interaction.response.send_message('❌ المدة يجب أن تكون بين دقيقة و 28 يوم.')
+        await self._timeout(interaction.guild, member, minutes, reason_text(reason))
+        await interaction.response.send_message(f'⏳ تم إعطاء {member.mention} تايم لمدة **{minutes}** دقيقة.')
+
+    @commands.command(name='فك تايم')
+    @commands.guild_only()
+    @commands.has_permissions(moderate_members=True)
+    @commands.bot_has_permissions(moderate_members=True)
+    async def untimeout_prefix(self, ctx, member: discord.Member):
+        await member.timeout(None, reason=f'Un-timeout by {ctx.author}')
+        log_activity(ctx.guild.id, 'untimeout', str(member), member.id)
+        await ctx.reply(f'✅ تم فك التايم عن {member.mention}.')
+
+    @app_commands.command(name='untimeout', description='Remove a member timeout')
+    @app_commands.checks.has_permissions(moderate_members=True)
+    async def untimeout_slash(self, interaction: discord.Interaction, member: discord.Member):
+        await member.timeout(None, reason=f'Un-timeout by {interaction.user}')
+        log_activity(interaction.guild.id, 'untimeout', str(member), member.id)
+        await interaction.response.send_message(f'✅ تم فك التايم عن {member.mention}.')
+
+    @commands.command(name='تحذير')
+    @commands.guild_only()
+    @commands.has_permissions(moderate_members=True)
+    async def warn_prefix(self, ctx, member: discord.Member, *, reason: str = 'بدون سبب'):
+        reason = reason_text(reason)
+        with connection() as conn:
+            conn.execute('INSERT INTO warnings(guild_id,user_id,moderator_id,reason) VALUES(?,?,?,?)', (ctx.guild.id, member.id, ctx.author.id, reason))
+            count = conn.execute('SELECT COUNT(*) AS c FROM warnings WHERE guild_id=? AND user_id=?', (ctx.guild.id, member.id)).fetchone()['c']
+        log_activity(ctx.guild.id, 'warn', f'{member} | {reason}', member.id)
+        await ctx.reply(f'⚠️ تم تحذير {member.mention}. مجموع التحذيرات: **{count}**.')
+
+    @app_commands.command(name='warn', description='Warn a member')
+    @app_commands.checks.has_permissions(moderate_members=True)
+    async def warn_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
+        reason = reason_text(reason)
+        with connection() as conn:
+            conn.execute('INSERT INTO warnings(guild_id,user_id,moderator_id,reason) VALUES(?,?,?,?)', (interaction.guild.id, member.id, interaction.user.id, reason))
+            count = conn.execute('SELECT COUNT(*) AS c FROM warnings WHERE guild_id=? AND user_id=?', (interaction.guild.id, member.id)).fetchone()['c']
+        log_activity(interaction.guild.id, 'warn', f'{member} | {reason}', member.id)
+        await interaction.response.send_message(f'⚠️ تم تحذير {member.mention}. مجموع التحذيرات: **{count}**.')
+
+    @commands.command(name='تحذيرات')
+    @commands.guild_only()
+    @commands.has_permissions(moderate_members=True)
+    async def warnings_prefix(self, ctx, member: discord.Member):
+        with connection() as conn:
+            rows = conn.execute('SELECT reason, moderator_id, created_at FROM warnings WHERE guild_id=? AND user_id=? ORDER BY id DESC LIMIT 10', (ctx.guild.id, member.id)).fetchall()
+        if not rows:
+            return await ctx.reply(f'✅ {member.mention} ما عليه تحذيرات.')
+        lines = [f'**{i}.** {row["reason"]} — <@{row["moderator_id"]}> ({row["created_at"]})' for i, row in enumerate(rows, 1)]
+        await ctx.reply(f'⚠️ تحذيرات {member.mention}:\n' + '\n'.join(lines))
+
+    @commands.command(name='مسح تحذيرات')
+    @commands.guild_only()
+    @commands.has_permissions(moderate_members=True)
+    async def clear_warnings_prefix(self, ctx, member: discord.Member):
+        with connection() as conn:
+            conn.execute('DELETE FROM warnings WHERE guild_id=? AND user_id=?', (ctx.guild.id, member.id))
+        log_activity(ctx.guild.id, 'clear_warnings', str(member), member.id)
+        await ctx.reply(f'🧹 تم مسح تحذيرات {member.mention}.')
+
+    @commands.command(name='مسح')
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_messages=True)
+    async def purge_prefix(self, ctx, amount: int):
+        if not 1 <= amount <= 100:
+            return await ctx.reply('❌ العدد يجب أن يكون بين 1 و 100.')
+        deleted = await ctx.channel.purge(limit=amount + 1)
+        await ctx.send(f'🧹 تم حذف **{len(deleted) - 1}** رسالة.', delete_after=4)
+        log_activity(ctx.guild.id, 'purge', str(amount), ctx.author.id)
+
+    @app_commands.command(name='clear', description='Delete messages')
+    @app_commands.checks.has_permissions(manage_messages=True)
+    async def purge_slash(self, interaction: discord.Interaction, amount: int):
+        if not 1 <= amount <= 100:
+            return await interaction.response.send_message('❌ العدد يجب أن يكون بين 1 و 100.')
+        await interaction.response.defer(ephemeral=True)
+        deleted = await interaction.channel.purge(limit=amount)
+        log_activity(interaction.guild.id, 'purge', str(amount), interaction.user.id)
+        await interaction.followup.send(f'🧹 تم حذف **{len(deleted)}** رسالة.')
+
+    @commands.command(name='قفل')
+    @commands.guild_only()
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    async def lock_prefix(self, ctx):
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_messages = False
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.reply('🔒 تم قفل الروم.')
+
+    @commands.command(name='فتح')
+    @commands.guild_only()
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    async def unlock_prefix(self, ctx):
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_messages = None
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.reply('🔓 تم فتح الروم.')
+
+    @commands.command(name='قفل روم')
+    @commands.guild_only()
+    @commands.has_permissions(manage_channels=True)
+    async def lock_room_prefix(self, ctx, channel: discord.TextChannel | None = None):
+        channel = channel or ctx.channel
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_messages = False
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.reply(f'🔒 تم قفل {channel.mention}.')
+
+    @commands.command(name='فتح روم')
+    @commands.guild_only()
+    @commands.has_permissions(manage_channels=True)
+    async def unlock_room_prefix(self, ctx, channel: discord.TextChannel | None = None):
+        channel = channel or ctx.channel
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_messages = None
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.reply(f'🔓 تم فتح {channel.mention}.')
+
+    @commands.command(name='تثبيت')
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def pin_prefix(self, ctx, message_id: int):
+        try:
+            message = await ctx.channel.fetch_message(message_id)
+            await message.pin()
+            await ctx.reply('📌 تم تثبيت الرسالة.')
+        except discord.HTTPException:
+            await ctx.reply('❌ ما قدرت أثبت الرسالة.')
+
+    @commands.command(name='اعلان')
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def announce_prefix(self, ctx, channel: discord.TextChannel, *, text: str):
+        embed = discord.Embed(title='📢 إعلان', description=text, color=discord.Color.blurple())
+        embed.set_footer(text=f'بواسطة {ctx.author}')
+        await channel.send(embed=embed)
+        await ctx.reply('✅ تم إرسال الإعلان.')
+
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, (commands.MissingPermissions, commands.BotMissingPermissions)):
+            await ctx.reply('❌ ما عندك الصلاحية المطلوبة أو البوت ناقصه صلاحية.')
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply('❌ ناقصك متغير في الأمر. استخدم `!مساعدة`.')
+        elif isinstance(error, commands.BadArgument):
+            await ctx.reply('❌ تأكد من المنشن/الرقم والبيانات المدخلة.')
+        else:
+            await ctx.reply(f'❌ صار خطأ: `{type(error).__name__}`')
+            raise error
+
+
+async def setup(bot):
+    await bot.add_cog(Moderation(bot))
