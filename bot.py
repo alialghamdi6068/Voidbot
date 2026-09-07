@@ -16,6 +16,32 @@ intents.members = True
 bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents, help_command=None)
 app = create_app(bot)
 
+MULTIWORD_ALIASES = {
+    '!فك تايم': '!فك_تايم',
+    '!مسح تحذيرات': '!مسح_تحذيرات',
+    '!قفل روم': '!قفل_روم',
+    '!فتح روم': '!فتح_روم',
+    '!انهاء قيفاواي': '!انهاء',
+    '!اعادة قيفاواي': '!اعادة',
+    '!قبول اقتراح': '!قبول_اقتراح',
+    '!رفض اقتراح': '!رفض_اقتراح',
+    '!حذف رد': '!حذف_رد',
+    '!رتبة تلقائية': '!رتبة_تلقائية',
+    '!قيفاواي روم': '!قيفاواي_روم',
+}
+
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    content = message.content
+    for public_name, internal_name in MULTIWORD_ALIASES.items():
+        if content == public_name or content.startswith(public_name + ' '):
+            message.content = internal_name + content[len(public_name):]
+            break
+    await bot.process_commands(message)
+
 
 @bot.event
 async def on_ready():
@@ -47,11 +73,7 @@ async def on_command_error(ctx, error):
 
 
 async def load_cogs():
-    cog_names = [
-        'moderation', 'tickets', 'applications', 'levels', 'welcome', 'logs',
-        'giveaways', 'suggestions', 'afk', 'autoreply', 'autorole',
-        'announcements', 'reminders', 'scheduler', 'utility', 'owner'
-    ]
+    cog_names = ['moderation','tickets','applications','levels','welcome','logs','giveaways','suggestions','afk','autoreply','autorole','announcements','reminders','scheduler','utility','owner']
     for name in cog_names:
         try:
             await bot.load_extension(f'cogs.{name}')
