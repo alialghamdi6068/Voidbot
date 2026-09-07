@@ -46,3 +46,20 @@ def register_auth(app, bot):
 def discord_token():
     data = session.get('oauth') or {}
     return data.get('access_token')
+
+
+def managed_guild_ids():
+    token = discord_token()
+    if not token:
+        return set()
+    try:
+        response = requests.get(f'{DISCORD_API}/users/@me/guilds', headers={'Authorization': f'Bearer {token}'}, timeout=15)
+        if response.status_code != 200:
+            return set()
+        allowed = set()
+        for guild in response.json():
+            if guild.get('owner') or (int(guild.get('permissions', 0)) & 0x20):
+                allowed.add(int(guild['id']))
+        return allowed
+    except requests.RequestException:
+        return set()
