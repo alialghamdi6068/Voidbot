@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from contextlib import contextmanager
 from config import DATABASE_PATH
@@ -8,6 +9,12 @@ CREATE TABLE IF NOT EXISTS warnings (id INTEGER PRIMARY KEY AUTOINCREMENT, guild
 CREATE TABLE IF NOT EXISTS levels (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, xp INTEGER NOT NULL DEFAULT 0, level INTEGER NOT NULL DEFAULT 0, last_message REAL NOT NULL DEFAULT 0, PRIMARY KEY(guild_id,user_id));
 CREATE TABLE IF NOT EXISTS afk (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(guild_id,user_id));
 CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER, action TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, channel_id INTEGER UNIQUE NOT NULL, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, closed_at TEXT);
+CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT);
+CREATE TABLE IF NOT EXISTS suggestions (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, message_id INTEGER, content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS giveaways (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, message_id INTEGER, prize TEXT NOT NULL, winners INTEGER NOT NULL DEFAULT 1, ends_at REAL NOT NULL, ended INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, text TEXT NOT NULL, due_at REAL NOT NULL, sent INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, text TEXT NOT NULL, due_at REAL NOT NULL, sent INTEGER NOT NULL DEFAULT 0);
 """
 
 def init_db():
@@ -26,16 +33,20 @@ def connection():
         conn.close()
 
 def get_guild_data(guild_id):
-    import json
     with connection() as conn:
         row = conn.execute('SELECT data FROM guild_settings WHERE guild_id=?', (guild_id,)).fetchone()
         return json.loads(row['data']) if row else {}
 
 def set_guild_data(guild_id, data):
-    import json
     payload = json.dumps(data, ensure_ascii=False)
     with connection() as conn:
         conn.execute('INSERT INTO guild_settings(guild_id,data) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET data=excluded.data', (guild_id, payload))
+
+def update_guild_data(guild_id, **changes):
+    data = get_guild_data(guild_id)
+    data.update(changes)
+    set_guild_data(guild_id, data)
+    return data
 
 def log_activity(guild_id, action, details='', user_id=None):
     with connection() as conn:
