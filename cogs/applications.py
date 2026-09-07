@@ -6,7 +6,7 @@ from database import get_guild_data, connection, log_activity
 
 class ApplicationReviewView(discord.ui.View):
     def __init__(self, cog, application_id):
-        super().__init__(timeout=None)
+        super().__init__(timeout=86400)
         self.cog = cog
         self.application_id = application_id
 
@@ -37,11 +37,11 @@ class ApplicationReviewView(discord.ui.View):
         log_activity(interaction.guild.id, 'application_review', f'#{self.application_id} -> {status}', interaction.user.id)
         await interaction.response.send_message(f'✅ {label}.', ephemeral=True)
 
-    @discord.ui.button(label='قبول', style=discord.ButtonStyle.success, custom_id='flame_application_accept')
+    @discord.ui.button(label='قبول', style=discord.ButtonStyle.success)
     async def accept(self, interaction, button):
         await self.review(interaction, 'accepted')
 
-    @discord.ui.button(label='رفض', style=discord.ButtonStyle.danger, custom_id='flame_application_reject')
+    @discord.ui.button(label='رفض', style=discord.ButtonStyle.danger)
     async def reject(self, interaction, button):
         await self.review(interaction, 'rejected')
 
@@ -74,10 +74,6 @@ class Applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.bot.add_view(ApplicationReviewView(self, 0))
-
     @commands.command(name='تقديم')
     @commands.guild_only()
     async def application_prefix(self, ctx):
@@ -91,8 +87,35 @@ class Applications(commands.Cog):
 
     @app_commands.command(name='apply', description='Open the application form')
     @app_commands.guild_only()
-    async def application_slash(self, interaction: discord.Interaction):
+    async def application_slash(self, interaction):
         await interaction.response.send_modal(ApplicationModal(self))
+
+    async def change_status(self, ctx, application_id, status):
+        with connection() as conn:
+            row = conn.execute('SELECT * FROM applications WHERE id=? AND guild_id=?', (application_id, ctx.guild.id)).fetchone()
+            if not row:
+                return await ctx.reply('❌ التقديم غير موجود.')
+            conn.execute('UPDATE applications SET status=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (status, application_id))
+        label = 'مقبول' if status == 'accepted' else 'مرفوض'
+        user = ctx.guild.get_member(row['user_id'])
+        if user:
+            try:
+                await user.send(f'📨 تقديمك في **{ctx.guild.name}** أصبح: **{label}**.')
+            except discord.HTTPException:
+                pass
+        await ctx.reply(f'✅ تم تحديث التقديم #{application_id} إلى **{label}**.')
+
+    @commands.command(name='قبول_تقديم')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def accept_prefix(self, ctx, application_id: int):
+        await self.change_status(ctx, application_id, 'accepted')
+
+    @commands.command(name='رفض_تقديم')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def reject_prefix(self, ctx, application_id: int):
+        await self.change_status(ctx, application_id, 'rejected')
 
     @commands.command(name='تقديمات')
     @commands.guild_only()
