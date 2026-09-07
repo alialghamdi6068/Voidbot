@@ -1,1 +1,139 @@
+import random
+import re
+import time
 
+import discord
+from discord import app_commands
+from discord.ext import commands, tasks
+
+from database import connection, get_guild_data, update_guild_data, log_activity
+
+
+DURATION_RE = re.compile(r'^(\d+)([smhd])$', re.IGNORECASE)
+
+
+def parse_duration(value: str) -> int:
+    match = DURATION_RE.fullmatch(value.strip())
+    if not match:
+        raise ValueError
+    amount = int(match.group(1))
+    unit = match.group(2).lower()
+    multiplier = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}[unit]
+    seconds = amount * multiplier
+    if seconds < 10 or seconds > 30 * 86400:
+        raise ValueError
+    return seconds
+
+
+class Giveaways(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.finish_loop.start()
+
+    def cog_unload(self):
+        self.finish_loop.cancel()
+
+    async def create_giveaway(self, guild, channel, author, duration, winners, prize):
+        ends_at = time.time() + duration
+        embed = discord.Embed(title='🎉 قيفاواي', description=f'**الجائزة:** {prize}\n**الفائزون:** {winners}\n**ينتهي:** <t:{int(ends_at)}:R>', color=discord.Color.blurple())
+        embed.set_footer(text=f'بدأه {author}')
+        message = await channel.send(embed=embed)
+        await message.add_reaction('🎉')
+        with connection() as conn:
+            conn.execute('INSERT INTO giveaways(guild_id,channel_id,message_id,prize,winners,ends_at) VALUES(?,?,?,?,?,?)', (guild.id, channel.id, message.id, prize, winners, ends_at))
+        log_activity(guild.id, 'giveaway_create', f'{prize} | {winners}', author.id)
+        return message
+
+    async def finish(self, row, reroll=False):
+        guild = self.bot.get_guild(row['guild_id'])
+        if not guild:
+            return []
+        channel = guild.get_channel(row['channel_id'])
+        if not isinstance(channel, discord.TextChannel):
+            return []
+        try:
+            message = await channel.fetch_message(row['message_id'])
+        except discord.HTTPException:
+            return []
+        reaction = next((r for r in message.reactions if str(r.emoji) == '🎉'), None)
+        if not reaction:
+            return []
+        users = [u async for u in reaction.users() if not u.bot]
+        if not users:
+            await channel.send(f'🎉 انتهى القيفاواي **{row["prize"]}** ولكن ما فيه مشاركين.')
+            return []
+        winners = random.sample(users, min(row['winners'], len(users)))
+        mentions = ', '.join(user.mention for user in winners)
+        await channel.send(f'🎉 مبروك {mentions}! فزتوا بـ **{row["prize"]}**!')
+        return winners
+
+    @tasks.loop(seconds=5)
+    async def finish_loop(self):
+        with connection() as conn:
+            rows = conn.execute('SELECT * FROM giveaways WHERE ended=0 AND ends_at<=?', (time.time(),)).fetchall()
+            for row in rows:
+                conn.execute('UPDATE giveaways SET ended=1 WHERE id=?', (row['id'],))
+        for row in rows:
+            await self.finish(row)
+
+    @finish_loop.before_loop
+    async def before_finish_loop(self):
+        await self.bot.wait_until_ready()
+
+    @commands.command(name='قيفاواي')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def giveaway_prefix(self, ctx, duration: str, winners: int, *, prize: str):
+        try:
+            seconds = parse_duration(duration)
+        except ValueError:
+            return await ctx.reply('❌ المدة غير صحيحة. استخدم مثل: `10m` أو `2h` أو `1d` (من 10 ثوانٍ إلى 30 يوم).')
+        if not 1 <= winners <= 50:
+            return await ctx.reply('❌ عدد الفائزين يجب أن يكون بين 1 و50.')
+        await self.create_giveaway(ctx.guild, ctx.channel, ctx.author, seconds, winners, prize[:200])
+        await ctx.reply('✅ تم إنشاء القيفاواي.', delete_after=5)
+
+    @app_commands.command(name='giveaway', description='Create a giveaway')
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def giveaway_slash(self, interaction, duration: str, winners: app_commands.Range[int, 1, 50], prize: str):
+        try:
+            seconds = parse_duration(duration)
+        except ValueError:
+            return await interaction.response.send_message('❌ المدة غير صحيحة. استخدم 10m أو 2h أو 1d.', ephemeral=True)
+        await self.create_giveaway(interaction.guild, interaction.channel, interaction.user, seconds, winners, prize[:200])
+        await interaction.response.send_message('✅ تم إنشاء القيفاواي.', ephemeral=True)
+
+    @commands.command(name='انهاء')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def end_prefix(self, ctx, message_id: int):
+        with connection() as conn:
+            row = conn.execute('SELECT * FROM giveaways WHERE guild_id=? AND message_id=? AND ended=0', (ctx.guild.id, message_id)).fetchone()
+            if row:
+                conn.execute('UPDATE giveaways SET ended=1 WHERE id=?', (row['id'],))
+        if not row:
+            return await ctx.reply('❌ ما لقيت قيفاواي شغال بهذا الرقم.')
+        await self.finish(row)
+        await ctx.reply('✅ تم إنهاء القيفاواي.', delete_after=5)
+
+    @commands.command(name='اعادة')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def reroll_prefix(self, ctx, message_id: int):
+        with connection() as conn:
+            row = conn.execute('SELECT * FROM giveaways WHERE guild_id=? AND message_id=?', (ctx.guild.id, message_id)).fetchone()
+        if not row:
+            return await ctx.reply('❌ ما لقيت القيفاواي.')
+        await self.finish(row, reroll=True)
+        await ctx.reply('🔄 تم اختيار فائز جديد.', delete_after=5)
+
+    @commands.command(name='قيفاواي_روم')
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def set_channel(self, ctx, channel: discord.TextChannel):
+        update_guild_data(ctx.guild.id, giveaways_channel_id=channel.id)
+        await ctx.reply(f'✅ تم تحديد روم القيفاواي: {channel.mention}')
+
+
+async def setup(bot):
+    await bot.add_cog(Giveaways(bot))
