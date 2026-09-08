@@ -34,6 +34,7 @@ class AutoRole(commands.Cog):
         await ctx.reply(f'✅ تم تحديد الرتبة التلقائية: {role.mention}')
 
     @app_commands.command(name='autorole', description='Set the automatic member role')
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_roles=True)
     async def set_role_slash(self, interaction, role: discord.Role):
         if not role.is_assignable():
