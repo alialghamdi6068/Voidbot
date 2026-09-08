@@ -1,3 +1,5 @@
+import time
+
 import discord
 from discord.ext import commands
 from database import get_guild_data, connection, log_activity
@@ -86,13 +88,12 @@ class Tickets(commands.Cog):
         if existing:
             return await interaction.response.send_message(f'❌ عندك تذكرة مفتوحة بالفعل: {existing.mention}', ephemeral=True)
 
-        # channel_id is UNIQUE in the database. Use a unique temporary negative
-        # value until Discord returns the real channel ID. Using 0 caused every
-        # second ticket to fail with a UNIQUE constraint error.
+        # channel_id is UNIQUE. A temporary unique negative value is used until Discord returns the real ID.
+        temporary_channel_id = -(1 + int(time.time() * 1000))
         with connection() as conn:
             cursor = conn.execute(
                 'INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)',
-                (guild.id, -(1 + int(time.time() * 1000)), user.id)
+                (guild.id, temporary_channel_id, user.id)
             )
             ticket_id = cursor.lastrowid
 
