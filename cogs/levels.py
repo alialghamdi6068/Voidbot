@@ -46,6 +46,7 @@ class Levels(commands.Cog):
         await ctx.reply(f'📊 مستوى {member.mention}: **{level}**\n⭐ XP: **{xp}**')
 
     @app_commands.command(name='level', description='Show a member level')
+    @app_commands.guild_only()
     async def level_slash(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         with connection() as conn:
@@ -64,6 +65,7 @@ class Levels(commands.Cog):
         await ctx.reply('🏆 **أفضل 10 أعضاء**\n' + '\n'.join(lines))
 
     @app_commands.command(name='leaderboard', description='Show the level leaderboard')
+    @app_commands.guild_only()
     async def top_slash(self, interaction: discord.Interaction):
         with connection() as conn:
             rows = conn.execute('SELECT user_id, xp, level FROM levels WHERE guild_id=? ORDER BY xp DESC LIMIT 10', (interaction.guild.id,)).fetchall()
