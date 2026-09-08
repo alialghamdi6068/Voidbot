@@ -12,11 +12,17 @@ class AutoReply(commands.Cog):
         if not message.guild or message.author.bot:
             return
         settings = get_guild_data(message.guild.id)
+        channel_id = settings.get('autoreply_channel_id')
+        if channel_id and message.channel.id != int(channel_id):
+            return
         replies = settings.get('autoreplies', {})
         text = message.content.lower()
         for trigger, response in replies.items():
             if trigger.lower() in text:
-                await message.channel.send(str(response)[:2000])
+                await message.channel.send(
+                    str(response)[:2000],
+                    allowed_mentions=discord.AllowedMentions(everyone=True, users=True, roles=True),
+                )
                 break
 
     @commands.command(name='رد')
