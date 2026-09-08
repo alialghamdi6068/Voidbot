@@ -1,0 +1,3 @@
+# Voidbot
+
+Discord bot project.
