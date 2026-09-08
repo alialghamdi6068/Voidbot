@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">FLAME SYSTEM</div><h1>{{ system_icon }} {{ system_title }}</h1><p>إعدادات هذا النظام مستقلة عن باقي الأنظمة.</p></div>
+  <button class="save-top" form="system-form">💾 حفظ</button>
+</div>
+<div class="system-layout">
+  <aside class="system-nav panel">
+    <h3>الأنظمة</h3>
+    {% for key, info in systems.items() %}
+      <a class="system-link {% if key == current_system %}active{% endif %}" href="{{ url_for('system_page', guild_id=guild.id, system=key) }}">{{ info[1] }} {{ info[0] }}</a>
+    {% endfor %}
+  </aside>
+  <form id="system-form" class="settings-page">
+    {% if current_system == 'welcome' %}
+    <section class="panel"><h2>👋 إعدادات الترحيب</h2><div class="form-grid">
+      <label>روم الترحيب<select name="welcome_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('welcome_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label>
+      <label class="wide">رسالة الترحيب<textarea name="welcome_message" rows="5">{{settings.get('welcome_message','أهلاً وسهلاً {member} في {server}! 👋')}}</textarea></label>
+      <label>الرتبة التلقائية<select name="auto_role_id"><option value="">بدون</option>{% for r in roles|sort(attribute='position', reverse=true) %}{% if not r.is_default() %}<option value="{{r.id}}" {% if settings.get('auto_role_id')|string == r.id|string %}selected{% endif %}>@{{r.name}}</option>{% endif %}{% endfor %}</select></label>
+    </div></section>
+    {% elif current_system == 'tickets' %}
+    <section class="panel"><h2>🎫 إعدادات التذاكر</h2><div class="form-grid">
+      <label>قسم التذاكر<select name="ticket_category_id"><option value="">بدون</option>{% for c in categories %}<option value="{{c.id}}" {% if settings.get('ticket_category_id')|string == c.id|string %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label>
+      <label>روم لوحة التذاكر<select name="ticket_panel_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('ticket_panel_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label>
+      <label>روم لوق التذاكر<select name="ticket_log_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('ticket_log_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label>
+    </div></section>
+    {% elif current_system == 'applications' %}
+    <section class="panel"><h2>📝 إعدادات التقديمات</h2><div class="form-grid"><label>روم التقديمات<select name="applications_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('applications_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label><label>روم لوق التقديمات<select name="applications_log_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('applications_log_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'levels' %}
+    <section class="panel"><h2>📈 إعدادات المستويات</h2><div class="form-grid"><label>روم المستويات<select name="level_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('level_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label><label>XP الأدنى<input type="number" name="xp_min" value="{{settings.get('xp_min',10)}}"></label><label>XP الأعلى<input type="number" name="xp_max" value="{{settings.get('xp_max',20)}}"></label><label>Cooldown<input type="number" name="level_cooldown" value="{{settings.get('level_cooldown',60)}}"></label><label class="check"><input type="checkbox" name="levels_enabled" {% if settings.get('levels_enabled',True) %}checked{% endif %}> تفعيل المستويات</label><label class="check"><input type="checkbox" name="level_announce" {% if settings.get('level_announce',True) %}checked{% endif %}> إعلان رفع المستوى</label></div></section>
+    {% elif current_system == 'autoreply' %}
+    <section class="panel"><h2>💬 إعدادات الردود التلقائية</h2><div class="form-grid"><label>روم الردود<select name="autoreply_channel_id"><option value="">كل الرومات</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('autoreply_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div><div class="reply-add"><input id="reply-trigger" placeholder="مثال: السلام عليكم"><input id="reply-response" placeholder="وعليكم السلام"><button type="button" class="purple-btn" id="add-reply">+ إضافة</button></div><div id="reply-list">{% for trigger,response in settings.get('autoreplies',{}).items() %}<div class="reply-row"><span><b>{{trigger}}</b> → {{response}}</span><button type="button" class="danger-btn delete-reply" data-trigger="{{trigger}}">حذف</button></div>{% else %}<div class="empty">لا توجد ردود.</div>{% endfor %}</div></section>
+    {% elif current_system == 'giveaways' %}
+    <section class="panel"><h2>🎉 إعدادات القيفاواي</h2><div class="form-grid"><label>روم القيفاواي<select name="giveaways_channel_id"><option value="">روم الأمر</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('giveaways_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'suggestions' %}
+    <section class="panel"><h2>💡 إعدادات الاقتراحات</h2><div class="form-grid"><label>روم الاقتراحات<select name="suggestions_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('suggestions_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label><label>روم لوق الاقتراحات<select name="suggestions_log_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('suggestions_log_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'logs' %}
+    <section class="panel"><h2>📋 إعدادات اللوق</h2><div class="form-grid"><label>روم اللوق<select name="log_channel_id"><option value="">بدون</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('log_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'autorole' %}
+    <section class="panel"><h2>🏷️ إعدادات الرتبة التلقائية</h2><div class="form-grid"><label>الرتبة<select name="auto_role_id"><option value="">بدون</option>{% for r in roles|sort(attribute='position', reverse=true) %}{% if not r.is_default() %}<option value="{{r.id}}" {% if settings.get('auto_role_id')|string == r.id|string %}selected{% endif %}>@{{r.name}}</option>{% endif %}{% endfor %}</select></label></div></section>
+    {% elif current_system == 'announcements' %}
+    <section class="panel"><h2>📢 إعدادات الإعلانات</h2><div class="form-grid"><label>روم الإعلانات<select name="announcements_channel_id"><option value="">روم الأمر</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('announcements_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'reminders' %}
+    <section class="panel"><h2>⏰ إعدادات التذكيرات</h2><div class="form-grid"><label>روم التذكيرات<select name="reminder_channel_id"><option value="">روم الأمر</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('reminder_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'scheduler' %}
+    <section class="panel"><h2>🗓️ إعدادات الجدولة</h2><div class="form-grid"><label>روم الجدولة<select name="scheduler_channel_id"><option value="">روم الأمر</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('scheduler_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% elif current_system == 'afk' %}
+    <section class="panel"><h2>💤 إعدادات الغياب</h2><div class="form-grid"><label>روم الغياب<select name="afk_channel_id"><option value="">كل الرومات</option>{% for c in channels %}<option value="{{c.id}}" {% if settings.get('afk_channel_id')|string == c.id|string %}selected{% endif %}># {{c.name}}</option>{% endfor %}</select></label></div></section>
+    {% endif %}
+    <div class="save-row"><button class="save-top" type="submit">💾 حفظ الإعدادات</button><span id="result"></span></div>
+  </form>
+</div>
+<script>window.FLAME_GUILD={{guild.id}};</script><script src="{{url_for('static',filename='script.js')}}"></script>
+{% endblock %}
