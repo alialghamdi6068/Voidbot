@@ -66,7 +66,7 @@ async def on_command_error(ctx, error):
 
 
 async def load_cogs():
-    cog_names = ['moderation','tickets','applications','levels','welcome','logs','giveaways','suggestions','afk','autoreply','autorole','announcements','reminders','scheduler','utility','owner']
+    cog_names = ['moderation','tickets','applications','levels','welcome','logs','giveaways','suggestions','afk','autoreply','autorole','announcements','reminders','scheduler','utility','owner','messaging']
     for name in cog_names:
         try:
             await bot.load_extension(f'cogs.{name}')
