@@ -8,7 +8,11 @@ class TicketView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label='استلام', style=discord.ButtonStyle.primary, emoji='📥', custom_id='flame_ticket_claim')
+    @discord.ui.button(label='فتح تذكرة', style=discord.ButtonStyle.primary, emoji='🎫', custom_id='flame_ticket_open')
+    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.create_ticket(interaction)
+
+    @discord.ui.button(label='استلام', style=discord.ButtonStyle.secondary, emoji='📥', custom_id='flame_ticket_claim')
     async def claim(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.guild or not interaction.user.guild_permissions.manage_channels:
             return await interaction.response.send_message('❌ هذا الزر للإدارة فقط.', ephemeral=True)
@@ -16,7 +20,7 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label='إغلاق', style=discord.ButtonStyle.danger, emoji='🔒', custom_id='flame_ticket_close')
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.guild:
+        if not interaction.guild or not interaction.channel:
             return
         with connection() as conn:
             row = conn.execute('SELECT * FROM tickets WHERE channel_id=? AND status="open"', (interaction.channel.id,)).fetchone()
@@ -25,6 +29,7 @@ class TicketView(discord.ui.View):
             if interaction.user.id != row['user_id'] and not interaction.user.guild_permissions.manage_channels:
                 return await interaction.response.send_message('❌ ما عندك صلاحية إغلاق هذه التذكرة.', ephemeral=True)
             conn.execute("UPDATE tickets SET status='closed', closed_at=CURRENT_TIMESTAMP WHERE channel_id=?", (interaction.channel.id,))
+        await self.cog.write_ticket_log(interaction.guild, f'🔒 تم إغلاق التذكرة {interaction.channel.mention} بواسطة {interaction.user.mention}')
         log_activity(interaction.guild.id, 'ticket_close', str(interaction.channel), interaction.user.id)
         await interaction.response.send_message('🔒 سيتم إغلاق التذكرة.')
         await interaction.channel.delete(reason=f'Ticket closed by {interaction.user}')
@@ -48,38 +53,57 @@ class Tickets(commands.Cog):
                 overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
         return overwrites
 
+    async def write_ticket_log(self, guild, text):
+        settings = get_guild_data(guild.id)
+        channel_id = settings.get('ticket_log_channel_id')
+        if not channel_id:
+            return
+        channel = guild.get_channel(int(channel_id))
+        if isinstance(channel, discord.TextChannel):
+            try:
+                await channel.send(text)
+            except discord.HTTPException:
+                pass
+
     async def create_ticket(self, interaction):
         guild, user = interaction.guild, interaction.user
+        if not guild:
+            return await interaction.response.send_message('❌ هذا الأمر داخل السيرفر فقط.', ephemeral=True)
         settings = get_guild_data(guild.id)
         category = guild.get_channel(int(settings['ticket_category_id'])) if settings.get('ticket_category_id') else None
         category = category if isinstance(category, discord.CategoryChannel) else None
         existing = discord.utils.find(lambda c: c.name == f'ticket-{user.id}', guild.text_channels)
         if existing:
             return await interaction.response.send_message(f'❌ عندك تذكرة مفتوحة بالفعل: {existing.mention}', ephemeral=True)
-        channel = await guild.create_text_channel(f'ticket-{user.id}', category=category, overwrites=self.ticket_overwrites(guild, user), reason='Flame ticket')
-        with connection() as conn:
-            conn.execute('INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)', (guild.id, channel.id, user.id))
-        log_activity(guild.id, 'ticket_open', str(channel), user.id)
-        embed = discord.Embed(title='🎫 تذكرة دعم', description=f'{user.mention} أهلاً بك! اكتب تفاصيل طلبك هنا.\n\nفريق الدعم يستطيع استلام التذكرة وإغلاقها.', color=discord.Color.blurple())
-        await channel.send(content=user.mention, embed=embed, view=TicketView(self))
-        await interaction.response.send_message(f'✅ تم فتح تذكرتك: {channel.mention}', ephemeral=True)
+        try:
+            channel = await guild.create_text_channel(f'ticket-{user.id}', category=category, overwrites=self.ticket_overwrites(guild, user), reason='Flame ticket')
+            with connection() as conn:
+                conn.execute('INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)', (guild.id, channel.id, user.id))
+            log_activity(guild.id, 'ticket_open', str(channel), user.id)
+            await self.write_ticket_log(guild, f'🎫 تم فتح {channel.mention} بواسطة {user.mention}')
+            embed = discord.Embed(title='🎫 تذكرة دعم', description=f'{user.mention} أهلاً بك! اكتب تفاصيل طلبك هنا.\n\nفريق الدعم يستطيع استلام التذكرة وإغلاقها.', color=discord.Color.blurple())
+            await channel.send(content=user.mention, embed=embed, view=TicketView(self))
+            await interaction.response.send_message(f'✅ تم فتح تذكرتك: {channel.mention}', ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message('❌ البوت لا يملك صلاحية إنشاء التذاكر. أعطه Manage Channels.', ephemeral=True)
+        except discord.HTTPException:
+            await interaction.response.send_message('❌ تعذر إنشاء التذكرة.', ephemeral=True)
 
     @commands.command(name='تكت')
     @commands.guild_only()
-    async def ticket_prefix(self, ctx):
-        guild, user = ctx.guild, ctx.author
-        settings = get_guild_data(guild.id)
-        category = guild.get_channel(int(settings['ticket_category_id'])) if settings.get('ticket_category_id') else None
-        category = category if isinstance(category, discord.CategoryChannel) else None
-        existing = discord.utils.find(lambda c: c.name == f'ticket-{user.id}', guild.text_channels)
-        if existing:
-            return await ctx.reply(f'❌ عندك تذكرة مفتوحة بالفعل: {existing.mention}')
-        channel = await guild.create_text_channel(f'ticket-{user.id}', category=category, overwrites=self.ticket_overwrites(guild, user), reason='Flame ticket')
-        with connection() as conn:
-            conn.execute('INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)', (guild.id, channel.id, user.id))
-        await channel.send(content=user.mention, embed=discord.Embed(title='🎫 تذكرة دعم', description='اكتب تفاصيل طلبك هنا.', color=discord.Color.blurple()), view=TicketView(self))
-        log_activity(guild.id, 'ticket_open', str(channel), user.id)
-        await ctx.reply(f'✅ تم فتح تذكرتك: {channel.mention}')
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_panel(self, ctx):
+        settings = get_guild_data(ctx.guild.id)
+        channel = ctx.guild.get_channel(int(settings['ticket_panel_channel_id'])) if settings.get('ticket_panel_channel_id') else ctx.channel
+        if not isinstance(channel, discord.TextChannel):
+            return await ctx.reply('❌ روم لوحة التذاكر المحدد غير صالح.')
+        embed = discord.Embed(title='🎫 نظام التذاكر', description='تحتاج مساعدة؟ اضغط **فتح تذكرة** وسيتم إنشاء تذكرة خاصة بك تلقائياً.', color=discord.Color.blurple())
+        embed.set_footer(text='Flame Ticket System')
+        await channel.send(embed=embed, view=TicketView(self))
+        if channel.id != ctx.channel.id:
+            await ctx.reply(f'✅ تم إرسال لوحة التذاكر في {channel.mention}.')
+        else:
+            await ctx.message.add_reaction('✅')
 
     @commands.command(name='استلام')
     @commands.guild_only()
@@ -97,6 +121,7 @@ class Tickets(commands.Cog):
             if ctx.author.id != row['user_id'] and not ctx.author.guild_permissions.manage_channels:
                 return await ctx.reply('❌ ما تقدر تغلق هذه التذكرة.')
             conn.execute("UPDATE tickets SET status='closed', closed_at=CURRENT_TIMESTAMP WHERE channel_id=?", (ctx.channel.id,))
+        await self.write_ticket_log(ctx.guild, f'🔒 تم إغلاق {ctx.channel.mention} بواسطة {ctx.author.mention}')
         await ctx.reply('🔒 سيتم إغلاق التذكرة.')
         await ctx.channel.delete(reason=f'Ticket closed by {ctx.author}')
 
