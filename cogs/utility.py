@@ -8,18 +8,42 @@ class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name='مساعدة')
+    @commands.command(name='اوامر', aliases=['مساعدة', 'help'])
     @commands.guild_only()
-    async def help_prefix(self, ctx):
-        embed = discord.Embed(title=f'🔥 {BOT_NAME} — المساعدة', description='استخدم الأوامر التالية:', color=discord.Color.blurple())
-        embed.add_field(name='🛡️ إدارة', value='`!باند` `!طرد` `!تايم` `!تحذير` `!تحذيرات` `!مسح` `!قفل` `!فتح`', inline=False)
-        embed.add_field(name='🎫 أنظمة', value='`!تكت` `!تقديم` `!اقتراح` `!قيفاواي` `!غياب` `!لفل` `!توب`', inline=False)
-        embed.add_field(name='⏰ أدوات', value='`!تذكير` `!جدولة` `!رد`', inline=False)
+    async def all_commands(self, ctx):
+        groups = {}
+        for command in self.bot.commands:
+            if command.hidden or command.name in groups:
+                continue
+            cog_name = command.cog_name or 'أخرى'
+            groups.setdefault(cog_name, []).append(command)
+
+        embed = discord.Embed(
+            title=f'🔥 {BOT_NAME} — جميع الأوامر',
+            description='هذه قائمة الأوامر المتاحة للبوت. الأوامر التي تحتاج صلاحيات لن تعمل إلا للمصرح لهم.',
+            color=discord.Color.blurple()
+        )
+        for cog_name, commands_list in groups.items():
+            names = []
+            for command in commands_list:
+                names.append(f'`!{command.name}`')
+            embed.add_field(name=f'📂 {cog_name}', value=' '.join(names)[:1024] or 'لا توجد أوامر', inline=False)
+
+        embed.set_footer(text=f'{BOT_NAME} • استخدم /help أيضاً للأوامر السلاش')
         await ctx.reply(embed=embed)
 
-    @app_commands.command(name='help', description='Show Flame commands')
+    @app_commands.command(name='help', description='Show all Flame commands')
     async def help_slash(self, interaction):
-        await interaction.response.send_message('🔥 استخدم `!مساعدة` لعرض أوامر Flame الأساسية.', ephemeral=True)
+        groups = {}
+        for command in self.bot.commands:
+            if command.hidden:
+                continue
+            cog_name = command.cog_name or 'Other'
+            groups.setdefault(cog_name, []).append(command.name)
+        embed = discord.Embed(title=f'🔥 {BOT_NAME} — جميع الأوامر', color=discord.Color.blurple())
+        for cog_name, names in groups.items():
+            embed.add_field(name=f'📂 {cog_name}', value=' '.join(f'`!{n}`' for n in names)[:1024], inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.command(name='بينج')
     async def ping(self, ctx):
