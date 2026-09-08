@@ -3,6 +3,22 @@ from flask import render_template, redirect, session, url_for, abort, request
 from database import get_guild_data, connection
 from web.auth import discord_token, managed_guild_ids
 
+SYSTEMS = {
+    'welcome': ('الترحيب', '👋'),
+    'tickets': ('التذاكر', '🎫'),
+    'applications': ('التقديمات', '📝'),
+    'levels': ('المستويات', '📈'),
+    'autoreply': ('الردود التلقائية', '💬'),
+    'giveaways': ('القيفاواي', '🎉'),
+    'suggestions': ('الاقتراحات', '💡'),
+    'logs': ('اللوق', '📋'),
+    'autorole': ('الرتبة التلقائية', '🏷️'),
+    'announcements': ('الإعلانات', '📢'),
+    'reminders': ('التذكيرات', '⏰'),
+    'scheduler': ('الجدولة', '🗓️'),
+    'afk': ('الغياب', '💤'),
+}
+
 
 def logged_in(fn):
     @wraps(fn)
@@ -48,16 +64,23 @@ def register_dashboard(app, bot):
         with connection() as conn:
             activity_count = conn.execute('SELECT COUNT(*) c FROM activity WHERE guild_id=?', (guild_id,)).fetchone()['c']
             member_levels = conn.execute('SELECT COUNT(*) c FROM levels WHERE guild_id=?', (guild_id,)).fetchone()['c']
-        return render_template('dashboard.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), activity_count=activity_count, member_levels=member_levels)
+        return render_template('dashboard.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), systems=SYSTEMS, activity_count=activity_count, member_levels=member_levels)
 
     @app.get('/dashboard/<int:guild_id>/settings')
     @logged_in
     def settings(guild_id):
+        return redirect(url_for('system_page', guild_id=guild_id, system='welcome'))
+
+    @app.get('/dashboard/<int:guild_id>/system/<system>')
+    @logged_in
+    def system_page(guild_id, system):
         guild = require_guild(guild_id, bot)
+        if system not in SYSTEMS:
+            abort(404)
         import discord
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
         categories = list(guild.categories)
-        return render_template('settings.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), channels=channels, categories=categories)
+        return render_template('system.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), channels=channels, categories=categories, roles=guild.roles, systems=SYSTEMS, current_system=system, system_title=SYSTEMS[system][0], system_icon=SYSTEMS[system][1])
 
     @app.get('/dashboard/<int:guild_id>/activity')
     @logged_in
