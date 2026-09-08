@@ -1,13 +1,10 @@
 import random
 import re
 import time
-
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-
 from database import connection, get_guild_data, update_guild_data, log_activity
-
 
 DURATION_RE = re.compile(r'^(\d+)([smhd])$', re.IGNORECASE)
 
@@ -16,10 +13,7 @@ def parse_duration(value: str) -> int:
     match = DURATION_RE.fullmatch(value.strip())
     if not match:
         raise ValueError
-    amount = int(match.group(1))
-    unit = match.group(2).lower()
-    multiplier = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}[unit]
-    seconds = amount * multiplier
+    seconds = int(match.group(1)) * {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}[match.group(2).lower()]
     if seconds < 10 or seconds > 30 * 86400:
         raise ValueError
     return seconds
@@ -34,6 +28,10 @@ class Giveaways(commands.Cog):
         self.finish_loop.cancel()
 
     async def create_giveaway(self, guild, channel, author, duration, winners, prize):
+        settings = get_guild_data(guild.id)
+        configured = guild.get_channel(int(settings['giveaways_channel_id'])) if settings.get('giveaways_channel_id') else None
+        if isinstance(configured, discord.TextChannel):
+            channel = configured
         ends_at = time.time() + duration
         embed = discord.Embed(title='🎉 قيفاواي', description=f'**الجائزة:** {prize}\n**الفائزون:** {winners}\n**ينتهي:** <t:{int(ends_at)}:R>', color=discord.Color.blurple())
         embed.set_footer(text=f'بدأه {author}')
@@ -87,7 +85,7 @@ class Giveaways(commands.Cog):
         try:
             seconds = parse_duration(duration)
         except ValueError:
-            return await ctx.reply('❌ المدة غير صحيحة. استخدم مثل: `10m` أو `2h` أو `1d` (من 10 ثوانٍ إلى 30 يوم).')
+            return await ctx.reply('❌ المدة غير صحيحة. استخدم `10m` أو `2h` أو `1d`.')
         if not 1 <= winners <= 50:
             return await ctx.reply('❌ عدد الفائزين يجب أن يكون بين 1 و50.')
         await self.create_giveaway(ctx.guild, ctx.channel, ctx.author, seconds, winners, prize[:200])
