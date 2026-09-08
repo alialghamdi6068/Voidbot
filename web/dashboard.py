@@ -29,17 +29,42 @@ def logged_in(fn):
     return wrapper
 
 
+def can_manage_guild(guild):
+    user = session.get('user') or {}
+    user_id = user.get('id')
+    if not user_id or not guild:
+        return False
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return False
+
+    # صاحب السيرفر مسموح له دائماً، حتى لو قائمة OAuth guilds لم ترجع الصلاحيات بشكل صحيح.
+    if guild.owner_id == user_id:
+        return True
+
+    member = guild.get_member(user_id)
+    if member:
+        return member.guild_permissions.manage_guild or member.guild_permissions.administrator
+
+    # fallback لقائمة Discord OAuth2.
+    return guild.id in managed_guild_ids()
+
+
 def manageable_guilds(bot):
-    allowed = managed_guild_ids()
-    return [guild for guild in bot.guilds if guild.id in allowed]
+    result = []
+    for guild in bot.guilds:
+        if can_manage_guild(guild):
+            result.append(guild)
+    return result
 
 
 def require_guild(guild_id, bot):
-    if guild_id not in managed_guild_ids():
-        abort(403)
     guild = bot.get_guild(guild_id)
     if not guild:
         abort(404)
+    if not can_manage_guild(guild):
+        abort(403)
     return guild
 
 
