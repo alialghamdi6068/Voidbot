@@ -1,11 +1,11 @@
 from flask import request, jsonify
-from database import get_guild_data, update_guild_data
+from database import get_guild_data, set_guild_data
 from web.dashboard import logged_in
 from web.auth import managed_guild_ids
 
 ALLOWED_SETTINGS = {
     'welcome_channel_id', 'welcome_message', 'auto_role_id', 'log_channel_id',
-    'ticket_category_id', 'ticket_panel_channel_id', 'ticket_log_channel_id',
+    'ticket_category_id', 'ticket_panel_channel_id', 'ticket_support_role_id', 'ticket_log_channel_id',
     'applications_channel_id', 'applications_log_channel_id',
     'suggestions_channel_id', 'suggestions_log_channel_id',
     'level_channel_id', 'level_announce', 'levels_enabled', 'xp_min', 'xp_max', 'level_cooldown',
@@ -14,11 +14,12 @@ ALLOWED_SETTINGS = {
 }
 
 INTEGER_SETTINGS = {
-    'welcome_channel_id', 'auto_role_id', 'log_channel_id', 'ticket_category_id',
-    'ticket_panel_channel_id', 'ticket_log_channel_id', 'applications_channel_id',
-    'applications_log_channel_id', 'suggestions_channel_id', 'suggestions_log_channel_id',
-    'level_channel_id', 'giveaways_channel_id', 'autoreply_channel_id',
-    'announcements_channel_id', 'scheduler_channel_id', 'reminder_channel_id', 'afk_channel_id',
+    'welcome_channel_id', 'auto_role_id', 'log_channel_id',
+    'ticket_category_id', 'ticket_panel_channel_id', 'ticket_support_role_id', 'ticket_log_channel_id',
+    'applications_channel_id', 'applications_log_channel_id',
+    'suggestions_channel_id', 'suggestions_log_channel_id', 'level_channel_id',
+    'giveaways_channel_id', 'autoreply_channel_id', 'announcements_channel_id',
+    'scheduler_channel_id', 'reminder_channel_id', 'afk_channel_id',
     'xp_min', 'xp_max', 'level_cooldown'
 }
 
@@ -64,11 +65,15 @@ def register_api(app, bot):
                     except (TypeError, ValueError):
                         return jsonify({'ok': False, 'error': f'القيمة غير صحيحة: {key}'}), 400
             elif key in BOOLEAN_SETTINGS:
-                value = bool(value)
+                if isinstance(value, str):
+                    value = value.lower() in ('true', '1', 'yes', 'on')
+                else:
+                    value = bool(value)
             elif key == 'welcome_message':
                 value = str(value)[:2000]
             data[key] = value
 
-        # احفظ ككتلة واحدة حتى لا يضيع أي تعديل بسبب تحديثات متتالية.
-        update_guild_data(guild_id, **data)
-        return jsonify({'ok': True, 'settings': get_guild_data(guild_id)})
+        # الحفظ المباشر يستبدل بيانات السيرفر المحدد فقط ويضمن بقاء التعديلات بعد إعادة تحميل الصفحة.
+        set_guild_data(guild_id, data)
+        saved = get_guild_data(guild_id)
+        return jsonify({'ok': True, 'settings': saved})
