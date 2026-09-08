@@ -86,29 +86,34 @@ class Tickets(commands.Cog):
         if existing:
             return await interaction.response.send_message(f'❌ عندك تذكرة مفتوحة بالفعل: {existing.mention}', ephemeral=True)
 
-        # نحصل على رقم متسلسل من قاعدة البيانات قبل إنشاء الروم.
-        with connection() as conn:
-            cursor = conn.execute('INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)', (guild.id, 0, user.id))
-            ticket_id = cursor.lastrowid
-
+        # ننشئ الروم أولاً لأن channel_id في قاعدة البيانات UNIQUE ولا يقبل قيمة مؤقتة مكررة.
         try:
             channel = await guild.create_text_channel(
-                f'ticket-{ticket_id:04d}',
+                f'ticket-pending-{user.id}',
                 category=category,
                 overwrites=self.ticket_overwrites(guild, user),
                 topic=f'flame-ticket-user:{user.id}',
                 reason='Flame ticket'
             )
-            with connection() as conn:
-                conn.execute('UPDATE tickets SET channel_id=? WHERE id=?', (channel.id, ticket_id))
         except discord.Forbidden:
-            with connection() as conn:
-                conn.execute('DELETE FROM tickets WHERE id=?', (ticket_id,))
             return await interaction.response.send_message('❌ البوت لا يملك Manage Channels لإنشاء التذكرة.', ephemeral=True)
         except discord.HTTPException:
-            with connection() as conn:
-                conn.execute('DELETE FROM tickets WHERE id=?', (ticket_id,))
             return await interaction.response.send_message('❌ تعذر إنشاء التذكرة.', ephemeral=True)
+
+        try:
+            with connection() as conn:
+                cursor = conn.execute(
+                    'INSERT INTO tickets(guild_id,channel_id,user_id) VALUES(?,?,?)',
+                    (guild.id, channel.id, user.id)
+                )
+                ticket_id = cursor.lastrowid
+            await channel.edit(name=f'ticket-{ticket_id:04d}', reason='Set ticket number')
+        except Exception:
+            try:
+                await channel.delete(reason='Ticket database creation failed')
+            except discord.HTTPException:
+                pass
+            return await interaction.response.send_message('❌ تعذر حفظ التذكرة في قاعدة البيانات.', ephemeral=True)
 
         log_activity(guild.id, 'ticket_open', str(channel), user.id)
         await self.write_ticket_log(guild, f'🎫 تم فتح `{channel.name}` بواسطة {user.mention}.')
