@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title or 'Flame Dashboard' }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+<div class="glow glow-one"></div><div class="glow glow-two"></div>
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('dashboard', guild_id=guild.id) if guild else url_for('servers') }}"><span>🔥</span><div>Flame<small>Dashboard</small></div></a>
+  {% if guild %}
+  <div class="server-mini"><span>{{ guild.name[:1] }}</span><div>{{ guild.name }}<small>{{ guild.member_count or 0 }} عضو</small></div></div>
+  <nav>
+    <a href="{{ url_for('dashboard', guild_id=guild.id) }}">⌂ <span>الرئيسية</span></a>
+    <a href="{{ url_for('settings', guild_id=guild.id) }}">⚙ <span>الإعدادات</span></a>
+    <a href="{{ url_for('commands_page', guild_id=guild.id) }}">⌘ <span>الأوامر</span></a>
+    <a href="{{ url_for('activity', guild_id=guild.id) }}">◷ <span>النشاط واللوق</span></a>
+  </nav>
+  {% endif %}
+  <div class="sidebar-bottom">
+    <a href="{{ url_for('servers') }}">◈ <span>السيرفرات</span></a>
+    <a href="{{ url_for('logout') }}">↪ <span>تسجيل الخروج</span></a>
+  </div>
+</aside>
+<main class="main"><header class="mobile-head"><a class="brand" href="{{ url_for('servers') }}"><span>🔥</span><div>Flame</div></a></header>{% block content %}{% endblock %}</main>
+</body></html>
