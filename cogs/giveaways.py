@@ -92,6 +92,7 @@ class Giveaways(commands.Cog):
         await ctx.reply('✅ تم إنشاء القيفاواي.', delete_after=5)
 
     @app_commands.command(name='giveaway', description='Create a giveaway')
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_guild=True)
     async def giveaway_slash(self, interaction, duration: str, winners: app_commands.Range[int, 1, 50], prize: str):
         try:
