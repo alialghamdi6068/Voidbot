@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 from database import connection, get_guild_data, update_guild_data, log_activity
 
@@ -29,17 +28,23 @@ class Suggestions(commands.Cog):
             if not row:
                 return await ctx.reply('❌ الاقتراح غير موجود.')
             conn.execute('UPDATE suggestions SET status=? WHERE id=?', (status, suggestion_id))
-        channel = ctx.guild.get_channel(row['message_id'] and row['guild_id'])
-        for ch in ctx.guild.text_channels:
+        message = None
+        channel_id = get_guild_data(ctx.guild.id).get('suggestions_channel_id')
+        channel = ctx.guild.get_channel(int(channel_id)) if channel_id else None
+        if isinstance(channel, discord.TextChannel):
             try:
-                msg = await ch.fetch_message(row['message_id'])
-                embed = msg.embeds[0] if msg.embeds else discord.Embed(description=row['content'])
-                embed.color = discord.Color.green() if status == 'accepted' else discord.Color.red()
-                embed.set_field_at(1, name='الحالة', value='🟢 مقبول' if status == 'accepted' else '🔴 مرفوض') if len(embed.fields) > 1 else embed.add_field(name='الحالة', value=status)
-                await msg.edit(embed=embed)
-                break
+                message = await channel.fetch_message(row['message_id'])
             except (discord.NotFound, discord.Forbidden):
-                continue
+                message = None
+        if message:
+            embed = message.embeds[0] if message.embeds else discord.Embed(description=row['content'])
+            embed.color = discord.Color.green() if status == 'accepted' else discord.Color.red()
+            value = '🟢 مقبول' if status == 'accepted' else '🔴 مرفوض'
+            if len(embed.fields) > 1:
+                embed.set_field_at(1, name='الحالة', value=value)
+            else:
+                embed.add_field(name='الحالة', value=value)
+            await message.edit(embed=embed)
         await ctx.reply('✅ تم تحديث حالة الاقتراح.')
         log_activity(ctx.guild.id, 'suggestion_review', f'#{suggestion_id} -> {status}', ctx.author.id)
 
@@ -54,17 +59,6 @@ class Suggestions(commands.Cog):
         await self.create(ctx.guild, ctx.author, content, channel)
         if channel.id != ctx.channel.id:
             await ctx.reply(f'✅ تم إرسال اقتراحك في {channel.mention}.')
-
-    @app_commands.command(name='suggest', description='Send a suggestion')
-    @app_commands.guild_only()
-    async def suggestion_slash(self, interaction, content: str):
-        settings = get_guild_data(interaction.guild.id)
-        channel_id = settings.get('suggestions_channel_id')
-        channel = interaction.guild.get_channel(int(channel_id)) if channel_id else interaction.channel
-        if not isinstance(channel, discord.TextChannel):
-            return await interaction.response.send_message('❌ روم الاقتراحات غير صحيح.', ephemeral=True)
-        await self.create(interaction.guild, interaction.user, content, channel)
-        await interaction.response.send_message('✅ تم إرسال اقتراحك.', ephemeral=True)
 
     @commands.command(name='اقتراحات')
     @commands.guild_only()
