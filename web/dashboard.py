@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import render_template, redirect, session, url_for, abort
+from flask import render_template, redirect, session, url_for, abort, request
 from database import get_guild_data, connection
 from web.auth import discord_token, managed_guild_ids
 
@@ -30,6 +30,8 @@ def require_guild(guild_id, bot):
 def register_dashboard(app, bot):
     @app.get('/')
     def home():
+        if request.args.get('code') and request.args.get('state'):
+            return redirect(url_for('callback', code=request.args['code'], state=request.args['state']))
         if session.get('user'):
             return redirect(url_for('servers'))
         return render_template('index.html')
