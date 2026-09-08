@@ -37,7 +37,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='ban', description='Ban a member')
     @app_commands.checks.has_permissions(ban_members=True)
-    async def ban_slash(self, interaction, member: discord.Member, reason='بدون سبب'):
+    async def ban_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
         await self._ban(interaction.guild, member, reason_text(reason))
         await interaction.response.send_message(f'🔨 تم حظر {member.mention}.')
 
@@ -51,7 +51,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='kick', description='Kick a member')
     @app_commands.checks.has_permissions(kick_members=True)
-    async def kick_slash(self, interaction, member: discord.Member, reason='بدون سبب'):
+    async def kick_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
         await self._kick(interaction.guild, member, reason_text(reason))
         await interaction.response.send_message(f'👢 تم طرد {member.mention}.')
 
@@ -67,7 +67,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='timeout', description='Timeout a member')
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def timeout_slash(self, interaction, member: discord.Member, minutes: int, reason='بدون سبب'):
+    async def timeout_slash(self, interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = 'بدون سبب'):
         if not 1 <= minutes <= 40320:
             return await interaction.response.send_message('❌ المدة يجب أن تكون بين دقيقة و28 يوم.')
         await self._timeout(interaction.guild, member, minutes, reason_text(reason))
@@ -84,7 +84,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='untimeout', description='Remove a member timeout')
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def untimeout_slash(self, interaction, member: discord.Member):
+    async def untimeout_slash(self, interaction: discord.Interaction, member: discord.Member):
         await member.timeout(None, reason=f'Un-timeout by {interaction.user}')
         log_activity(interaction.guild.id, 'untimeout', str(member), member.id)
         await interaction.response.send_message(f'✅ تم فك التايم عن {member.mention}.')
@@ -102,7 +102,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='warn', description='Warn a member')
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def warn_slash(self, interaction, member: discord.Member, reason='بدون سبب'):
+    async def warn_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
         reason = reason_text(reason)
         with connection() as conn:
             conn.execute('INSERT INTO warnings(guild_id,user_id,moderator_id,reason) VALUES(?,?,?,?)', (interaction.guild.id, member.id, interaction.user.id, reason))
@@ -143,7 +143,7 @@ class Moderation(commands.Cog):
 
     @app_commands.command(name='clear', description='Delete messages')
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def purge_slash(self, interaction, amount: int):
+    async def purge_slash(self, interaction: discord.Interaction, amount: int):
         if not 1 <= amount <= 100:
             return await interaction.response.send_message('❌ العدد يجب أن يكون بين 1 و100.')
         await interaction.response.defer(ephemeral=True)
