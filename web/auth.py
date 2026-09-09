@@ -10,8 +10,15 @@ DISCORD_API = 'https://discord.com/api/v10'
 def register_auth(app, bot):
     @app.get('/login')
     def login():
+        # OAuth2 is configured once by the site owner in the hosting environment.
+        # Never expose hosting setup instructions to normal website visitors.
         if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET or not DISCORD_REDIRECT_URI:
-            return render_template('error.html', title='OAuth2 غير مكتمل', message='أضف إعدادات Discord OAuth2 في الاستضافة.'), 500
+            return render_template(
+                'error.html',
+                title='تعذر تسجيل الدخول',
+                message='تسجيل الدخول غير متاح حاليًا. يرجى المحاولة لاحقًا.'
+            ), 503
+
         state = secrets.token_urlsafe(32)
         session.clear()
         session['oauth_state'] = state
@@ -30,7 +37,7 @@ def register_auth(app, bot):
         state = request.args.get('state')
         expected = session.get('oauth_state')
         if not state or not expected or state != expected:
-            return render_template('error.html', title='خطأ في تسجيل الدخول', message='جلسة تسجيل الدخول انتهت أو لم يتم حفظها. تأكد من SESSION_SECRET ثم حاول مرة أخرى.'), 400
+            return render_template('error.html', title='خطأ في تسجيل الدخول', message='تعذر إكمال جلسة تسجيل الدخول. حاول مرة أخرى.'), 400
 
         code = request.args.get('code')
         if not code:
@@ -51,13 +58,13 @@ def register_auth(app, bot):
             )
             if response.status_code != 200:
                 session.clear()
-                return render_template('error.html', title='فشل OAuth2', message=f'Discord رفض تسجيل الدخول (HTTP {response.status_code}). تأكد من Redirect URI.'), 502
+                return render_template('error.html', title='فشل تسجيل الدخول', message='تعذر تسجيل الدخول عبر Discord. تأكد من إعدادات التطبيق وحاول مرة أخرى.'), 502
 
             token = response.json()
             access_token = token.get('access_token')
             if not access_token:
                 session.clear()
-                return render_template('error.html', title='فشل OAuth2', message='Discord لم يرجع Access Token.'), 502
+                return render_template('error.html', title='فشل تسجيل الدخول', message='تعذر إكمال تسجيل الدخول عبر Discord.'), 502
 
             headers = {'Authorization': f'Bearer {access_token}'}
             user_response = requests.get(f'{DISCORD_API}/users/@me', headers=headers, timeout=15)
