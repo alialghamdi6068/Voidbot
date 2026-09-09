@@ -34,25 +34,26 @@ def can_manage_guild(guild):
     user_id = user.get('id')
     if not user_id or not guild:
         return False
+
     try:
         user_id = int(user_id)
     except (TypeError, ValueError):
         return False
 
-    # صاحب السيرفر مسموح له دائماً.
+    # مالك السيرفر لديه صلاحية كاملة.
     if guild.owner_id == user_id:
         return True
 
-    # Discord OAuth2 هو المصدر الأساسي لصلاحية المستخدم في الـDashboard.
-    # هذا يمنع مشكلة الـcache إذا كان Member موجوداً لكن صلاحياته غير محدثة.
-    oauth_guilds = managed_guild_ids()
-    if guild.id in oauth_guilds:
+    # OAuth2 هو المصدر الرئيسي: MANAGE_GUILD أو ADMINISTRATOR.
+    if guild.id in managed_guild_ids():
         return True
 
-    # fallback إضافي من كاش Discord المحلي.
+    # لا نعتمد على كاش Member وحده، لكن نستخدمه كاحتياط.
     member = guild.get_member(user_id)
     if member:
-        return bool(member.guild_permissions.manage_guild or member.guild_permissions.administrator)
+        permissions = member.guild_permissions
+        if permissions.administrator or permissions.manage_guild:
+            return True
 
     return False
 
