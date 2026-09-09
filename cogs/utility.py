@@ -16,7 +16,6 @@ class Utility(commands.Cog):
         for command in self.bot.commands:
             if command.hidden or command.name in {'اوامر', 'اوامر_الادارة', 'مساعدة', 'help'}:
                 continue
-            # Admin/restricted commands belong in !اوامر_الادارة.
             if getattr(command, 'checks', None):
                 restricted = any(
                     getattr(check, '__name__', '') in {'predicate', 'is_owner'}
@@ -39,7 +38,7 @@ class Utility(commands.Cog):
 
         if not groups:
             embed.description = 'لا توجد أوامر عامة حاليًا.'
-        embed.set_footer(text=f'{BOT_NAME} • الأوامر الإدارية: !اوامر_الادارة')
+        embed.set_footer(text=f'{BOT_NAME} • أوامر الإدارة: !اوامر الادارة')
         await ctx.reply(embed=embed)
 
     @commands.command(name='اوامر_الادارة')
@@ -53,7 +52,6 @@ class Utility(commands.Cog):
                 continue
             if not getattr(command, 'checks', None):
                 continue
-            # Include commands protected by permission/owner checks.
             cog_name = command.cog_name or 'أخرى'
             groups.setdefault(cog_name, []).append(command)
 
