@@ -23,4 +23,4 @@ BOT_NAME = "Flame"
 DASHBOARD_NAME = "Flame Dashboard"
 
 if not DISCORD_TOKEN:
-    raise RuntimeError("DISCORD_TOKEN is missing. Add it to the Render environment variables.")
+    raise RuntimeError("DISCORD_TOKEN is missing. Add it to the Wispbyte environment variables.")
