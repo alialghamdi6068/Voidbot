@@ -18,10 +18,19 @@ app = create_app(bot)
 
 MULTIWORD_ALIASES = {
     '!اوامر الادارة': '!اوامر_الادارة',
-    '!فك تايم': '!فك_تايم', '!مسح تحذيرات': '!مسح_تحذيرات', '!قفل روم': '!قفل_روم', '!فتح روم': '!فتح_روم',
-    '!انهاء قيفاواي': '!انهاء', '!اعادة قيفاواي': '!اعادة', '!قبول اقتراح': '!قبول_اقتراح', '!رفض اقتراح': '!رفض_اقتراح',
-    '!حذف رد': '!حذف_رد', '!رتبة تلقائية': '!رتبة_تلقائية', '!قيفاواي روم': '!قيفاواي_روم',
-    '!قبول تقديم': '!قبول_تقديم', '!رفض تقديم': '!رفض_تقديم',
+    '!فك تايم': '!فك_تايم',
+    '!مسح تحذيرات': '!مسح_تحذيرات',
+    '!قفل روم': '!قفل_روم',
+    '!فتح روم': '!فتح_روم',
+    '!انهاء قيفاواي': '!انهاء',
+    '!اعادة قيفاواي': '!اعادة',
+    '!قبول اقتراح': '!قبول_اقتراح',
+    '!رفض اقتراح': '!رفض_اقتراح',
+    '!حذف رد': '!حذف_رد',
+    '!رتبة تلقائية': '!رتبة_تلقائية',
+    '!قيفاواي روم': '!قيفاواي_روم',
+    '!قبول تقديم': '!قبول_تقديم',
+    '!رفض تقديم': '!رفض_تقديم',
 }
 
 
@@ -40,11 +49,13 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     print(f'[{BOT_NAME}] Logged in as {bot.user} | Guilds: {len(bot.guilds)}')
+    for guild in bot.guilds:
+        print(f'[{BOT_NAME}] Guild: {guild.name} ({guild.id})')
     try:
         synced = await bot.tree.sync()
         print(f'[{BOT_NAME}] Synced {len(synced)} slash commands.')
     except Exception as exc:
-        print(f'[{BOT_NAME}] Slash sync failed: {exc}')
+        print(f'[{BOT_NAME}] Slash sync failed: {type(exc).__name__}: {exc}')
 
 
 @bot.event
@@ -67,7 +78,12 @@ async def on_command_error(ctx, error):
 
 
 async def load_cogs():
-    cog_names = ['moderation','tickets','applications','levels','welcome','logs','giveaways','suggestions','afk','autoreply','autorole','announcements','reminders','scheduler','utility','owner','messaging']
+    cog_names = [
+        'moderation', 'tickets', 'applications', 'levels', 'welcome', 'logs',
+        'giveaways', 'suggestions', 'afk', 'autoreply', 'autorole',
+        'announcements', 'reminders', 'scheduler', 'utility', 'owner',
+        'messaging', 'dashboard_commands'
+    ]
     for name in cog_names:
         try:
             await bot.load_extension(f'cogs.{name}')
@@ -75,7 +91,7 @@ async def load_cogs():
         except commands.ExtensionNotFound:
             print(f'[{BOT_NAME}] Missing cogs.{name}; skipped.')
         except Exception as exc:
-            print(f'[{BOT_NAME}] Failed to load cogs.{name}: {exc}')
+            print(f'[{BOT_NAME}] Failed to load cogs.{name}: {type(exc).__name__}: {exc}')
 
 
 def run_web():
