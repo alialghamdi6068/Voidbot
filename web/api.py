@@ -30,7 +30,10 @@ def register_api(app, bot):
     @logged_in
     def save_settings(guild_id):
         guild = bot.get_guild(guild_id)
-        if not guild or not can_manage_guild(guild):
+        if not guild:
+            return jsonify({'ok': False, 'error': 'السيرفر غير موجود أو البوت غير متصل به.'}), 404
+
+        if not can_manage_guild(guild):
             return jsonify({'ok': False, 'error': 'غير مصرح لك بإدارة هذا السيرفر.'}), 403
 
         payload = request.get_json(silent=True) or {}
