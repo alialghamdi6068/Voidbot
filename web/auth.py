@@ -7,6 +7,36 @@ from config import DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_UR
 DISCORD_API = 'https://discord.com/api/v10'
 
 
+def _managed_guilds_from_token(token):
+    if not token:
+        return set()
+    try:
+        response = requests.get(
+            f'{DISCORD_API}/users/@me/guilds',
+            headers={'Authorization': f'Bearer {token}'},
+            timeout=15,
+        )
+        if response.status_code != 200:
+            return set()
+
+        allowed = set()
+        for guild in response.json():
+            try:
+                permissions = int(guild.get('permissions_new', guild.get('permissions', 0)))
+            except (TypeError, ValueError):
+                permissions = 0
+
+            # MANAGE_GUILD = 0x20, ADMINISTRATOR = 0x8.
+            if guild.get('owner') is True or permissions & 0x20 or permissions & 0x8:
+                try:
+                    allowed.add(int(guild['id']))
+                except (KeyError, TypeError, ValueError):
+                    continue
+        return allowed
+    except (requests.RequestException, ValueError, TypeError):
+        return set()
+
+
 def register_auth(app, bot):
     @app.get('/login')
     def login():
@@ -72,7 +102,9 @@ def register_auth(app, bot):
                 session.clear()
                 return render_template('error.html', title='فشل تسجيل الدخول', message='تعذر جلب بيانات حساب Discord.'), 502
 
+            guilds = _managed_guilds_from_token(access_token)
             user = user_response.json()
+
             session.clear()
             session['oauth'] = {
                 'access_token': access_token,
@@ -85,6 +117,9 @@ def register_auth(app, bot):
                 'global_name': user.get('global_name'),
                 'avatar': user.get('avatar'),
             }
+            # Keep the exact managed-server set from the successful OAuth login.
+            # This avoids a second Discord API call failing during a save request.
+            session['managed_guild_ids'] = sorted(guilds)
             return redirect(url_for('servers'))
         except (requests.RequestException, ValueError, TypeError):
             session.clear()
@@ -101,25 +136,15 @@ def discord_token():
 
 
 def managed_guild_ids():
-    token = discord_token()
-    if not token:
-        return set()
-    try:
-        response = requests.get(
-            f'{DISCORD_API}/users/@me/guilds',
-            headers={'Authorization': f'Bearer {token}'},
-            timeout=15,
-        )
-        if response.status_code != 200:
-            return set()
-        allowed = set()
-        for guild in response.json():
+    # Prefer the signed session cache created immediately after OAuth login.
+    cached = session.get('managed_guild_ids')
+    if isinstance(cached, list):
+        result = set()
+        for guild_id in cached:
             try:
-                permissions = int(guild.get('permissions', 0))
+                result.add(int(guild_id))
             except (TypeError, ValueError):
-                permissions = 0
-            if guild.get('owner') is True or permissions & 0x20 or permissions & 0x8:
-                allowed.add(int(guild['id']))
-        return allowed
-    except (requests.RequestException, ValueError, TypeError):
-        return set()
+                continue
+        return result
+
+    return _managed_guilds_from_token(discord_token())
