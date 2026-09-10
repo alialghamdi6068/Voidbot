@@ -50,5 +50,5 @@
     <div class="save-row"><button id="save-settings" class="save-top" type="submit" hidden disabled>💾 حفظ الإعدادات</button><span id="result"></span></div>
   </form>
 </div>
-<script>window.FLAME_GUILD={{guild.id}};</script><script src="{{url_for('static',filename='script.js')}}"></script>
+<script>window.FLAME_GUILD={{ guild.id|string|tojson }};</script><script src="{{url_for('static',filename='script.js')}}"></script>
 {% endblock %}
