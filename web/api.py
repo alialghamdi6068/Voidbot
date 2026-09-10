@@ -25,12 +25,27 @@ INTEGER_SETTINGS = {
 BOOLEAN_SETTINGS = {'level_announce', 'levels_enabled'}
 
 
+def _get_bot_guild(bot, guild_id):
+    try:
+        guild_id = int(guild_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        guilds = list(bot.guilds)
+    except Exception:
+        return None
+    for guild in guilds:
+        if guild.id == guild_id:
+            return guild
+    return None
+
+
 def register_api(app, bot):
     @app.post('/api/guild/<int:guild_id>/settings')
     @logged_in
     def save_settings(guild_id):
-        guild = bot.get_guild(guild_id)
-        if not guild:
+        guild = _get_bot_guild(bot, guild_id)
+        if guild is None:
             return jsonify({'ok': False, 'error': 'السيرفر غير موجود أو البوت غير متصل به.'}), 404
 
         if not can_manage_guild(guild):
