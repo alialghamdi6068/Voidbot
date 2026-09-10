@@ -1,21 +1,14 @@
 from functools import wraps
+import requests
 from flask import render_template, redirect, session, url_for, abort, request
 from database import get_guild_data, connection
 from web.auth import discord_token, managed_guild_ids
 
 SYSTEMS = {
-    'welcome': ('الترحيب', '👋'),
-    'tickets': ('التذاكر', '🎫'),
-    'applications': ('التقديمات', '📝'),
-    'levels': ('المستويات', '📈'),
-    'autoreply': ('الردود التلقائية', '💬'),
-    'giveaways': ('القيفاواي', '🎉'),
-    'suggestions': ('الاقتراحات', '💡'),
-    'logs': ('اللوق', '📋'),
-    'autorole': ('الرتبة التلقائية', '🏷️'),
-    'announcements': ('الإعلانات', '📢'),
-    'reminders': ('التذكيرات', '⏰'),
-    'scheduler': ('الجدولة', '🗓️'),
+    'welcome': ('الترحيب', '👋'), 'tickets': ('التذاكر', '🎫'), 'applications': ('التقديمات', '📝'),
+    'levels': ('المستويات', '📈'), 'autoreply': ('الردود التلقائية', '💬'), 'giveaways': ('القيفاواي', '🎉'),
+    'suggestions': ('الاقتراحات', '💡'), 'logs': ('اللوق', '📋'), 'autorole': ('الرتبة التلقائية', '🏷️'),
+    'announcements': ('الإعلانات', '📢'), 'reminders': ('التذكيرات', '⏰'), 'scheduler': ('الجدولة', '🗓️'),
     'afk': ('الغياب', '💤'),
 }
 
@@ -23,55 +16,55 @@ SYSTEMS = {
 def logged_in(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get('user') or not discord_token():
-            return redirect(url_for('login'))
+        if not session.get('user') or not discord_token(): return redirect(url_for('login'))
         return fn(*args, **kwargs)
     return wrapper
 
 
 def can_manage_guild(guild):
-    user = session.get('user') or {}
-    user_id = user.get('id')
-    if not user_id or not guild:
-        return False
-
-    try:
-        user_id = int(user_id)
-    except (TypeError, ValueError):
-        return False
-
-    # مالك السيرفر لديه صلاحية كاملة.
-    if guild.owner_id == user_id:
-        return True
-
-    # OAuth2 هو المصدر الرئيسي: MANAGE_GUILD أو ADMINISTRATOR.
-    if guild.id in managed_guild_ids():
-        return True
-
-    # لا نعتمد على كاش Member وحده، لكن نستخدمه كاحتياط.
+    user_id = (session.get('user') or {}).get('id')
+    if not user_id or not guild: return False
+    try: user_id = int(user_id)
+    except (TypeError, ValueError): return False
+    if guild.owner_id == user_id: return True
+    if guild.id in managed_guild_ids(): return True
     member = guild.get_member(user_id)
-    if member:
-        permissions = member.guild_permissions
-        if permissions.administrator or permissions.manage_guild:
-            return True
-
-    return False
+    return bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
 
 
 def manageable_guilds(bot):
-    result = []
-    for guild in bot.guilds:
-        if can_manage_guild(guild):
-            result.append(guild)
-    return result
+    """Return every guild the logged-in user can manage, even when the bot is absent."""
+    token = discord_token()
+    if not token: return []
+    try:
+        response = requests.get('https://discord.com/api/v10/users/@me/guilds', headers={'Authorization': f'Bearer {token}'}, timeout=15)
+        if response.status_code != 200: return []
+        bot_ids = {guild.id for guild in bot.guilds}
+        result = []
+        for item in response.json():
+            try:
+                permissions = int(item.get('permissions_new', item.get('permissions', 0)))
+                guild_id = int(item['id'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (item.get('owner') is True or permissions & 0x20 or permissions & 0x8):
+                continue
+            result.append({
+                'id': guild_id,
+                'name': item.get('name', 'سيرفر بدون اسم'),
+                'icon': item.get('icon'),
+                'member_count': item.get('approximate_member_count', 0),
+                'bot_installed': guild_id in bot_ids,
+            })
+        return result
+    except (requests.RequestException, ValueError, TypeError):
+        return []
 
 
 def require_guild(guild_id, bot):
     guild = bot.get_guild(guild_id)
-    if not guild:
-        abort(404)
-    if not can_manage_guild(guild):
-        abort(403)
+    if not guild: abort(404)
+    if not can_manage_guild(guild): abort(403)
     return guild
 
 
@@ -80,8 +73,7 @@ def register_dashboard(app, bot):
     def home():
         if request.args.get('code') and request.args.get('state'):
             return redirect(url_for('callback', code=request.args['code'], state=request.args['state']))
-        if session.get('user'):
-            return redirect(url_for('servers'))
+        if session.get('user'): return redirect(url_for('servers'))
         return render_template('index.html')
 
     @app.get('/servers')
@@ -100,26 +92,22 @@ def register_dashboard(app, bot):
 
     @app.get('/dashboard/<int:guild_id>/settings')
     @logged_in
-    def settings(guild_id):
-        return redirect(url_for('system_page', guild_id=guild_id, system='welcome'))
+    def settings(guild_id): return redirect(url_for('system_page', guild_id=guild_id, system='welcome'))
 
     @app.get('/dashboard/<int:guild_id>/system/<system>')
     @logged_in
     def system_page(guild_id, system):
         guild = require_guild(guild_id, bot)
-        if system not in SYSTEMS:
-            abort(404)
+        if system not in SYSTEMS: abort(404)
         import discord
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
-        categories = list(guild.categories)
-        return render_template('system.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), channels=channels, categories=categories, roles=guild.roles, systems=SYSTEMS, current_system=system, system_title=SYSTEMS[system][0], system_icon=SYSTEMS[system][1])
+        return render_template('system.html', user=session['user'], guild=guild, settings=get_guild_data(guild_id), channels=channels, categories=list(guild.categories), roles=guild.roles, systems=SYSTEMS, current_system=system, system_title=SYSTEMS[system][0], system_icon=SYSTEMS[system][1])
 
     @app.get('/dashboard/<int:guild_id>/activity')
     @logged_in
     def activity(guild_id):
         guild = require_guild(guild_id, bot)
-        with connection() as conn:
-            rows = conn.execute('SELECT * FROM activity WHERE guild_id=? ORDER BY id DESC LIMIT 100', (guild_id,)).fetchall()
+        with connection() as conn: rows = conn.execute('SELECT * FROM activity WHERE guild_id=? ORDER BY id DESC LIMIT 100', (guild_id,)).fetchall()
         return render_template('activity.html', user=session['user'], guild=guild, rows=rows)
 
     @app.get('/dashboard/<int:guild_id>/commands')
