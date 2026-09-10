@@ -1,4 +1,4 @@
-import datetime
+import random
 import re
 
 import discord
@@ -20,7 +20,6 @@ class NewCommands(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
-        # Replace the old prefix warning command with the upgraded version below.
         self.bot.remove_command('تحذير')
 
     async def _send_warning_dm(self, member, guild, moderator, reason, number):
@@ -55,12 +54,9 @@ class NewCommands(commands.Cog):
     @commands.has_permissions(moderate_members=True)
     async def warn(self, ctx, target: str, *, reason='بدون سبب'):
         reason = reason.strip()[:1000] or 'بدون سبب'
-        role_id = None
         role_match = re.fullmatch(r'<@&(\d+)>', target.strip())
         if role_match:
-            role_id = int(role_match.group(1))
-        if role_id:
-            role = ctx.guild.get_role(role_id)
+            role = ctx.guild.get_role(int(role_match.group(1)))
             if not role or role.is_default() or role.managed:
                 return await ctx.reply('❌ الرتبة غير صالحة.')
             members = [m for m in role.members if not m.bot]
@@ -72,8 +68,7 @@ class NewCommands(commands.Cog):
                 _, dm = await self._warn_member(ctx.guild, member, ctx.author, reason)
                 sent += int(dm)
                 failed += int(not dm)
-            await ctx.reply(f'⚠️ تم تحذير **{len(members)}** عضوًا في {role.mention}.\n📩 الخاص: **{sent}** | تعذر الإرسال: **{failed}**')
-            return
+            return await ctx.reply(f'⚠️ تم تحذير **{len(members)}** عضوًا في {role.mention}.\n📩 الخاص: **{sent}** | تعذر الإرسال: **{failed}**')
 
         member_id = parse_mention_id(target)
         member = ctx.guild.get_member(member_id) if member_id else None
@@ -188,7 +183,7 @@ class NewCommands(commands.Cog):
         await ctx.reply(f'🏠 **{g.name}**\n👥 الأعضاء: **{g.member_count or 0}**\n💬 القنوات: **{len(g.channels)}**\n🏷️ الرتب: **{len(g.roles)-1}**\n📅 الإنشاء: {discord.utils.format_dt(g.created_at, "D")}')
 
     @commands.command(name='احصائيات')
-    async def bot_stats(self, ctx):
+    async def stats(self, ctx):
         guilds = len(self.bot.guilds)
         users = len({m.id for g in self.bot.guilds for m in g.members})
         channels = sum(len(g.channels) for g in self.bot.guilds)
