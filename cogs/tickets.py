@@ -5,16 +5,17 @@ from database import get_guild_data, connection, log_activity
 
 
 class TicketPanelView(discord.ui.View):
-    def __init__(self, cog, buttons=None):
+    def __init__(self, cog, guild_id, buttons=None):
         super().__init__(timeout=None)
         self.cog = cog
+        self.guild_id = guild_id
         configs = buttons or [{'label': 'فتح تذكرة', 'emoji': '🎫', 'style': 'success'}]
         for index, config in enumerate(configs[:5]):
-            self.add_item(TicketPanelButton(cog, config, index))
+            self.add_item(TicketPanelButton(cog, config, guild_id, index))
 
 
 class TicketPanelButton(discord.ui.Button):
-    def __init__(self, cog, config, index):
+    def __init__(self, cog, config, guild_id, index):
         styles = {
             'primary': discord.ButtonStyle.primary,
             'secondary': discord.ButtonStyle.secondary,
@@ -27,7 +28,7 @@ class TicketPanelButton(discord.ui.Button):
             label=label,
             style=styles.get(config.get('style'), discord.ButtonStyle.success),
             emoji=emoji,
-            custom_id=f"flame_ticket_panel_{index}_{abs(hash(label)) % 1000000000}"
+            custom_id=f'flame_tp:{guild_id}:{index}'
         )
         self.cog = cog
         self.config = config
@@ -221,7 +222,7 @@ class Tickets(commands.Cog):
         if footer:
             embed.set_footer(text=footer)
         buttons = settings.get('ticket_buttons') or [{'label': 'فتح تذكرة', 'emoji': '🎫', 'style': 'success'}]
-        await channel.send(embed=embed, view=TicketPanelView(self, buttons))
+        await channel.send(embed=embed, view=TicketPanelView(self, ctx.guild.id, buttons))
         await ctx.reply(f'✅ تم إرسال لوحة التذاكر في {channel.mention}.')
 
     @commands.command(name='تكت')
@@ -259,6 +260,10 @@ class Tickets(commands.Cog):
     async def on_ready(self):
         if not getattr(self.bot, '_flame_ticket_views_added', False):
             self.bot.add_view(TicketView(self))
+            for guild in self.bot.guilds:
+                settings = get_guild_data(guild.id)
+                buttons = settings.get('ticket_buttons') or [{'label': 'فتح تذكرة', 'emoji': '🎫', 'style': 'success'}]
+                self.bot.add_view(TicketPanelView(self, guild.id, buttons))
             self.bot._flame_ticket_views_added = True
 
 
