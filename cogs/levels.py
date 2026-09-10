@@ -30,18 +30,31 @@ class Levels(commands.Cog):
         settings = get_guild_data(message.guild.id)
         if settings.get('levels_enabled', True) is False:
             return
-        cooldown = max(0, int(settings.get('level_cooldown', 60) or 0))
-        minimum = max(1, int(settings.get('xp_min', 10) or 10))
-        maximum = max(minimum, int(settings.get('xp_max', 20) or 20))
+
+        # Slower progression by default: longer cooldown, less XP per message,
+        # and a larger XP curve. Existing dashboard settings are still respected.
+        cooldown = max(90, int(settings.get('level_cooldown', 90) or 90))
+        minimum = max(1, int(settings.get('xp_min', 5) or 5))
+        maximum = max(minimum, int(settings.get('xp_max', 10) or 10))
         now = time.time()
+
         with connection() as conn:
-            row = conn.execute('SELECT xp, level, last_message FROM levels WHERE guild_id=? AND user_id=?', (message.guild.id, message.author.id)).fetchone()
+            row = conn.execute(
+                'SELECT xp, level, last_message FROM levels WHERE guild_id=? AND user_id=?',
+                (message.guild.id, message.author.id),
+            ).fetchone()
             if row and now - row['last_message'] < cooldown:
                 return
+
             xp = (row['xp'] if row else 0) + random.randint(minimum, maximum)
             level = row['level'] if row else 0
-            new_level = int(xp ** 0.5)
-            conn.execute('INSERT INTO levels(guild_id,user_id,xp,level,last_message) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET xp=excluded.xp,level=excluded.level,last_message=excluded.last_message', (message.guild.id, message.author.id, xp, new_level, now))
+            new_level = int((xp / 100) ** 0.5)
+            conn.execute(
+                'INSERT INTO levels(guild_id,user_id,xp,level,last_message) VALUES(?,?,?,?,?) '
+                'ON CONFLICT(guild_id,user_id) DO UPDATE SET xp=excluded.xp,level=excluded.level,last_message=excluded.last_message',
+                (message.guild.id, message.author.id, xp, new_level, now),
+            )
+
         if new_level > level:
             await self.apply_level_reward(message.guild, message.author, new_level, settings)
             channel_id = settings.get('level_channel_id')
