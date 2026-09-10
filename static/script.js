@@ -66,6 +66,57 @@ function buildSpecialPayload(p){
   return p;
 }
 
+function addVariablePanel(){
+  if(!form || !location.pathname.includes('/system/')) return;
+  const system=location.pathname.split('/').pop();
+  const configs={
+    welcome:{
+      title:'المتغيرات المتاحة للترحيب',
+      help:'انسخ المتغير وضعه داخل رسالة الترحيب، وسيتم استبداله تلقائياً عند دخول العضو.',
+      items:[
+        ['{member}','منشن العضو'],
+        ['{username}','اسم العضو'],
+        ['{server}','اسم السيرفر'],
+        ['{members}','عدد أعضاء السيرفر'],
+        ['{inviter}','الشخص الذي دعا العضو'],
+        ['{count}','عدد الأعضاء (قديم ومتوافق)']
+      ]
+    },
+    tickets:{
+      title:'المتغيرات المتاحة للتذاكر',
+      help:'تقدر تستخدمها داخل عنوان أو رسالة التذكرة.',
+      items:[
+        ['{member}','منشن صاحب التذكرة'],
+        ['{username}','اسم صاحب التذكرة'],
+        ['{server}','اسم السيرفر'],
+        ['{ticket}','رقم التذكرة']
+      ]
+    }
+  };
+  const config=configs[system];
+  if(!config)return;
+  const target=form.querySelector('textarea[name="welcome_message"]') || form.querySelector('textarea[name="ticket_button_description_1"]') || form.querySelector('textarea[name="ticket_panel_description"]');
+  if(!target)return;
+  if(form.querySelector('.flame-variables'))return;
+  const panel=document.createElement('div');
+  panel.className='panel flame-variables';
+  panel.style.marginTop='12px';
+  panel.innerHTML=`<h3>${config.title}</h3><p>${config.help}</p><div class="flame-variable-list"></div>`;
+  const list=panel.querySelector('.flame-variable-list');
+  config.items.forEach(([value,label])=>{
+    const row=document.createElement('div');
+    row.className='flame-variable-row';
+    row.innerHTML=`<code>${value}</code><span>${label}</span><button type="button" class="purple-btn flame-copy">نسخ</button>`;
+    row.querySelector('.flame-copy').addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(value);row.querySelector('.flame-copy').textContent='تم النسخ';setTimeout(()=>row.querySelector('.flame-copy').textContent='نسخ',1200);}catch(e){target.focus();document.execCommand('insertText',false,value);}
+    });
+    list.appendChild(row);
+  });
+  target.closest('label')?.insertAdjacentElement('afterend',panel);
+}
+
+addVariablePanel();
+
 if(form){
   form.addEventListener('input',markChanged);
   form.addEventListener('change',markChanged);
