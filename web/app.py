@@ -1,7 +1,7 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import SESSION_SECRET
-from web.security import csrf_token
+from web.security import csrf_token, rate_limit
 
 
 def create_app(bot):
@@ -12,12 +12,20 @@ def create_app(bot):
         SESSION_COOKIE_SAMESITE='Lax',
         SESSION_COOKIE_SECURE=True,
         MAX_CONTENT_LENGTH=256 * 1024,
+        PROPAGATE_EXCEPTIONS=False,
     )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     @app.context_processor
     def inject_security():
         return {'csrf_token': csrf_token()}
+
+    @app.before_request
+    def request_guards():
+        if request.path == '/health':
+            rate_limit('health')
+        if request.method == 'POST' and request.content_length and request.content_length > 256 * 1024:
+            return ('الطلب كبير جدًا.', 413)
 
     @app.after_request
     def security_headers(response):
@@ -26,6 +34,8 @@ def create_app(bot):
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
         response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+        response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
+        response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
@@ -35,8 +45,11 @@ def create_app(bot):
             "connect-src 'self'; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
         )
-        if request_is_secure():
-            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        if request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+        if session.get('user'):
+            response.headers['Cache-Control'] = 'no-store, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
         return response
 
     from web.auth import register_auth
@@ -49,7 +62,11 @@ def create_app(bot):
 
     @app.get('/health')
     def health():
-        return {'status': 'ok', 'bot_ready': bot.is_ready(), 'guilds': len(bot.guilds)}
+        return {'status': 'ok', 'bot_ready': bot.is_ready()}
+
+    @app.errorhandler(403)
+    def forbidden(error):
+        return render_template('error.html', title='غير مصرح', message='ليس لديك صلاحية لتنفيذ هذا الطلب.'), 403
 
     @app.errorhandler(404)
     def not_found(error):
@@ -64,8 +81,3 @@ def create_app(bot):
         return render_template('error.html', title='محاولات كثيرة', message='تم تجاوز عدد المحاولات المسموح بها. حاول لاحقًا.'), 429
 
     return app
-
-
-def request_is_secure():
-    from flask import request
-    return request.is_secure
