@@ -27,11 +27,44 @@ class Moderation(commands.Cog):
         await member.timeout(until, reason=reason)
         log_activity(guild.id, 'timeout', f'{member} | {minutes}m | {reason}', member.id)
 
+    async def _change_role(self, guild, member, role, add: bool, moderator):
+        me = guild.me
+        if me is None:
+            raise RuntimeError('Bot member is unavailable')
+        if role.is_default() or role.managed:
+            raise ValueError('invalid_role')
+        if role >= me.top_role:
+            raise ValueError('role_hierarchy')
+        if member == guild.owner:
+            raise ValueError('target_owner')
+        if member.top_role >= me.top_role and member != me:
+            raise ValueError('member_hierarchy')
+
+        if add:
+            if role in member.roles:
+                return False
+            await member.add_roles(role, reason=f'إعطاء رتبة بواسطة {moderator}')
+            action = 'give_role'
+        else:
+            if role not in member.roles:
+                return False
+            await member.remove_roles(role, reason=f'سحب رتبة بواسطة {moderator}')
+            action = 'remove_role'
+
+        log_activity(guild.id, action, f'{member} | {role.name}', member.id)
+        return True
+
     @commands.command(name='باند')
     @commands.guild_only()
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
     async def ban_prefix(self, ctx, member: discord.Member, *, reason='بدون سبب'):
+        if member == ctx.guild.owner:
+            return await ctx.reply('❌ ما تقدر تحظر مالك السيرفر.')
+        if member == ctx.guild.me:
+            return await ctx.reply('❌ ما تقدر تحظر البوت نفسه.')
+        if member.top_role >= ctx.guild.me.top_role and member != ctx.guild.owner:
+            return await ctx.reply('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._ban(ctx.guild, member, reason_text(reason))
         await ctx.reply(f'🔨 تم حظر {member.mention}.')
 
@@ -39,6 +72,10 @@ class Moderation(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(ban_members=True)
     async def ban_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
+        if member == interaction.guild.owner:
+            return await interaction.response.send_message('❌ ما تقدر تحظر مالك السيرفر.')
+        if member.top_role >= interaction.guild.me.top_role and member != interaction.guild.owner:
+            return await interaction.response.send_message('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._ban(interaction.guild, member, reason_text(reason))
         await interaction.response.send_message(f'🔨 تم حظر {member.mention}.')
 
@@ -47,6 +84,10 @@ class Moderation(commands.Cog):
     @commands.has_permissions(kick_members=True)
     @commands.bot_has_permissions(kick_members=True)
     async def kick_prefix(self, ctx, member: discord.Member, *, reason='بدون سبب'):
+        if member == ctx.guild.owner:
+            return await ctx.reply('❌ ما تقدر تطرد مالك السيرفر.')
+        if member.top_role >= ctx.guild.me.top_role and member != ctx.guild.owner:
+            return await ctx.reply('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._kick(ctx.guild, member, reason_text(reason))
         await ctx.reply(f'👢 تم طرد {member.mention}.')
 
@@ -54,6 +95,10 @@ class Moderation(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(kick_members=True)
     async def kick_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str = 'بدون سبب'):
+        if member == interaction.guild.owner:
+            return await interaction.response.send_message('❌ ما تقدر تطرد مالك السيرفر.')
+        if member.top_role >= interaction.guild.me.top_role and member != interaction.guild.owner:
+            return await interaction.response.send_message('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._kick(interaction.guild, member, reason_text(reason))
         await interaction.response.send_message(f'👢 تم طرد {member.mention}.')
 
@@ -64,6 +109,10 @@ class Moderation(commands.Cog):
     async def timeout_prefix(self, ctx, member: discord.Member, minutes: int, *, reason='بدون سبب'):
         if not 1 <= minutes <= 40320:
             return await ctx.reply('❌ المدة يجب أن تكون بين دقيقة و28 يوم.')
+        if member == ctx.guild.owner:
+            return await ctx.reply('❌ ما تقدر تعطي تايم لمالك السيرفر.')
+        if member.top_role >= ctx.guild.me.top_role and member != ctx.guild.owner:
+            return await ctx.reply('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._timeout(ctx.guild, member, minutes, reason_text(reason))
         await ctx.reply(f'⏳ تم إعطاء {member.mention} تايم لمدة **{minutes}** دقيقة.')
 
@@ -73,6 +122,10 @@ class Moderation(commands.Cog):
     async def timeout_slash(self, interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = 'بدون سبب'):
         if not 1 <= minutes <= 40320:
             return await interaction.response.send_message('❌ المدة يجب أن تكون بين دقيقة و28 يوم.')
+        if member == interaction.guild.owner:
+            return await interaction.response.send_message('❌ ما تقدر تعطي تايم لمالك السيرفر.')
+        if member.top_role >= interaction.guild.me.top_role and member != interaction.guild.owner:
+            return await interaction.response.send_message('❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.')
         await self._timeout(interaction.guild, member, minutes, reason_text(reason))
         await interaction.response.send_message(f'⏳ تم إعطاء {member.mention} تايم لمدة **{minutes}** دقيقة.')
 
@@ -92,6 +145,80 @@ class Moderation(commands.Cog):
         await member.timeout(None, reason=f'Un-timeout by {interaction.user}')
         log_activity(interaction.guild.id, 'untimeout', str(member), member.id)
         await interaction.response.send_message(f'✅ تم فك التايم عن {member.mention}.')
+
+    @commands.command(name='اعطاء رتبة')
+    @commands.guild_only()
+    @commands.has_permissions(manage_roles=True)
+    @commands.bot_has_permissions(manage_roles=True)
+    async def give_role_prefix(self, ctx, member: discord.Member, role: discord.Role):
+        try:
+            changed = await self._change_role(ctx.guild, member, role, True, ctx.author)
+        except ValueError as exc:
+            messages = {
+                'invalid_role': '❌ ما تقدر تعطي رتبة @everyone أو رتبة مرتبطة ببوت/تكامل.',
+                'role_hierarchy': '❌ رتبة البوت لازم تكون أعلى من الرتبة اللي تبي تعطيها.',
+                'target_owner': '❌ ما تقدر تعدل رتب مالك السيرفر.',
+                'member_hierarchy': '❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.',
+            }
+            return await ctx.reply(messages.get(str(exc), '❌ ما قدرت أعطي الرتبة.'))
+        if not changed:
+            return await ctx.reply(f'ℹ️ {member.mention} عنده رتبة {role.mention} بالفعل.')
+        await ctx.reply(f'✅ تم إعطاء {role.mention} إلى {member.mention}.')
+
+    @app_commands.command(name='give-role', description='Give a role to a member')
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def give_role_slash(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+        try:
+            changed = await self._change_role(interaction.guild, member, role, True, interaction.user)
+        except ValueError as exc:
+            messages = {
+                'invalid_role': '❌ ما تقدر تعطي رتبة @everyone أو رتبة مرتبطة ببوت/تكامل.',
+                'role_hierarchy': '❌ رتبة البوت لازم تكون أعلى من الرتبة اللي تبي تعطيها.',
+                'target_owner': '❌ ما تقدر تعدل رتب مالك السيرفر.',
+                'member_hierarchy': '❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.',
+            }
+            return await interaction.response.send_message(messages.get(str(exc), '❌ ما قدرت أعطي الرتبة.'))
+        if not changed:
+            return await interaction.response.send_message(f'ℹ️ {member.mention} عنده رتبة {role.mention} بالفعل.')
+        await interaction.response.send_message(f'✅ تم إعطاء {role.mention} إلى {member.mention}.')
+
+    @commands.command(name='سحب رتبة')
+    @commands.guild_only()
+    @commands.has_permissions(manage_roles=True)
+    @commands.bot_has_permissions(manage_roles=True)
+    async def remove_role_prefix(self, ctx, member: discord.Member, role: discord.Role):
+        try:
+            changed = await self._change_role(ctx.guild, member, role, False, ctx.author)
+        except ValueError as exc:
+            messages = {
+                'invalid_role': '❌ ما تقدر تسحب @everyone أو رتبة مرتبطة ببوت/تكامل.',
+                'role_hierarchy': '❌ رتبة البوت لازم تكون أعلى من الرتبة اللي تبي تسحبها.',
+                'target_owner': '❌ ما تقدر تعدل رتب مالك السيرفر.',
+                'member_hierarchy': '❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.',
+            }
+            return await ctx.reply(messages.get(str(exc), '❌ ما قدرت أسحب الرتبة.'))
+        if not changed:
+            return await ctx.reply(f'ℹ️ {member.mention} ما عنده رتبة {role.mention}.')
+        await ctx.reply(f'✅ تم سحب {role.mention} من {member.mention}.')
+
+    @app_commands.command(name='remove-role', description='Remove a role from a member')
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def remove_role_slash(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+        try:
+            changed = await self._change_role(interaction.guild, member, role, False, interaction.user)
+        except ValueError as exc:
+            messages = {
+                'invalid_role': '❌ ما تقدر تسحب @everyone أو رتبة مرتبطة ببوت/تكامل.',
+                'role_hierarchy': '❌ رتبة البوت لازم تكون أعلى من الرتبة اللي تبي تسحبها.',
+                'target_owner': '❌ ما تقدر تعدل رتب مالك السيرفر.',
+                'member_hierarchy': '❌ رتبة العضو أعلى من رتبة البوت أو مساوية لها.',
+            }
+            return await interaction.response.send_message(messages.get(str(exc), '❌ ما قدرت أسحب الرتبة.'))
+        if not changed:
+            return await interaction.response.send_message(f'ℹ️ {member.mention} ما عنده رتبة {role.mention}.')
+        await interaction.response.send_message(f'✅ تم سحب {role.mention} من {member.mention}.')
 
     @commands.command(name='تحذير')
     @commands.guild_only()
@@ -220,7 +347,9 @@ class Moderation(commands.Cog):
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.reply('❌ ناقصك متغير في الأمر.')
         elif isinstance(error, commands.BadArgument):
-            await ctx.reply('❌ تأكد من المنشن/الرقم والبيانات المدخلة.')
+            await ctx.reply('❌ تأكد من المنشن/الرقم/الرتبة والبيانات المدخلة.')
+        elif isinstance(error, commands.CommandInvokeError) and isinstance(error.original, discord.Forbidden):
+            await ctx.reply('❌ Discord رفض العملية. تأكد أن رتبة البوت أعلى من الرتبة المستهدفة وأن الصلاحيات صحيحة.')
         else:
             await ctx.reply(f'❌ صار خطأ: `{type(error).__name__}`')
             raise error
