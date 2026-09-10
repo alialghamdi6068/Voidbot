@@ -4,6 +4,10 @@ from discord.ext import commands
 from config import BOT_NAME
 
 
+def display_command_name(name: str) -> str:
+    return name.replace('_', ' ')
+
+
 class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -11,7 +15,6 @@ class Utility(commands.Cog):
     @commands.command(name='اوامر', aliases=['مساعدة', 'help'])
     @commands.guild_only()
     async def all_commands(self, ctx):
-        """Show commands available to regular members only."""
         groups = {}
         for command in self.bot.commands:
             if command.hidden or command.name in {'اوامر', 'اوامر_الادارة', 'مساعدة', 'help'}:
@@ -32,7 +35,7 @@ class Utility(commands.Cog):
             color=discord.Color.blurple()
         )
         for cog_name, commands_list in groups.items():
-            names = [f'`!{command.name}`' for command in commands_list]
+            names = [f'`!{display_command_name(command.name)}`' for command in commands_list]
             if names:
                 embed.add_field(name=f'📂 {cog_name}', value=' '.join(names)[:1024], inline=False)
 
@@ -45,7 +48,6 @@ class Utility(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def admin_commands(self, ctx):
-        """Show administrator-only commands."""
         groups = {}
         for command in self.bot.commands:
             if command.hidden or command.name in {'اوامر', 'اوامر_الادارة', 'مساعدة', 'help'}:
@@ -61,7 +63,7 @@ class Utility(commands.Cog):
             color=discord.Color.red()
         )
         for cog_name, commands_list in groups.items():
-            names = [f'`!{command.name}`' for command in commands_list]
+            names = [f'`!{display_command_name(command.name)}`' for command in commands_list]
             if names:
                 embed.add_field(name=f'📂 {cog_name}', value=' '.join(names)[:1024], inline=False)
 
@@ -79,7 +81,8 @@ class Utility(commands.Cog):
             groups.setdefault(cog_name, []).append(command.name)
         embed = discord.Embed(title=f'🔥 {BOT_NAME} — الأوامر العامة', color=discord.Color.blurple())
         for cog_name, names in groups.items():
-            embed.add_field(name=f'📂 {cog_name}', value=' '.join(f'`!{n}`' for n in names)[:1024], inline=False)
+            display_names = [display_command_name(n) for n in names]
+            embed.add_field(name=f'📂 {cog_name}', value=' '.join(f'`!{n}`' for n in display_names)[:1024], inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.command(name='بينج')
