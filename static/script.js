@@ -27,7 +27,17 @@ async function save(payload){
   return await r.json();
 }
 
+function removeTicketEmojiFields(){
+  if(!form)return;
+  form.querySelectorAll('[name^="ticket_button_emoji_"]').forEach(input=>{
+    const label=input.closest('label');
+    if(label) label.remove();
+    else input.remove();
+  });
+}
+
 function buildSpecialPayload(p){
+  removeTicketEmojiFields();
   if(document.querySelector('[name="ticket_button_label_1"]')){
     const buttons=[];
     for(let i=1;i<=5;i++){
@@ -35,7 +45,6 @@ function buildSpecialPayload(p){
       if(!label) continue;
       buttons.push({
         label,
-        emoji:document.querySelector(`[name="ticket_button_emoji_${i}"]`)?.value.trim() || '🎫',
         style:document.querySelector(`[name="ticket_button_style_${i}"]`)?.value || 'success',
         category_id:document.querySelector(`[name="ticket_button_category_${i}"]`)?.value || '',
         support_role_id:document.querySelector(`[name="ticket_button_role_${i}"]`)?.value || '',
@@ -115,6 +124,7 @@ function addVariablePanel(){
   target.closest('label')?.insertAdjacentElement('afterend',panel);
 }
 
+removeTicketEmojiFields();
 addVariablePanel();
 
 if(form){
