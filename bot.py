@@ -31,6 +31,8 @@ MULTIWORD_ALIASES = {
     '!قيفاواي روم': '!قيفاواي_روم',
     '!قبول تقديم': '!قبول_تقديم',
     '!رفض تقديم': '!رفض_تقديم',
+    '!اعطاء رتبة': '!اعطاء_رتبة',
+    '!سحب رتبة': '!سحب_رتبة',
 }
 
 
@@ -39,7 +41,7 @@ async def on_message(message):
     if message.author.bot:
         return
     content = message.content
-    for public_name, internal_name in MULTIWORD_ALIASES.items():
+    for public_name, internal_name in sorted(MULTIWORD_ALIASES.items(), key=lambda item: len(item[0]), reverse=True):
         if content == public_name or content.startswith(public_name + ' '):
             message.content = internal_name + content[len(public_name):]
             break
