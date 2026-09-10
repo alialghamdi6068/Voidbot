@@ -22,8 +22,48 @@ function markChanged(){
 }
 
 async function save(payload){
-  const r=await fetch(`/api/guild/${window.FLAME_GUILD}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const guildId=String(window.FLAME_GUILD || '').trim();
+  const r=await fetch(`/api/guild/${guildId}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   return await r.json();
+}
+
+function buildSpecialPayload(p){
+  if(document.querySelector('[name="ticket_button_label_1"]')){
+    const buttons=[];
+    for(let i=1;i<=5;i++){
+      const label=document.querySelector(`[name="ticket_button_label_${i}"]`)?.value.trim() || '';
+      if(!label) continue;
+      buttons.push({
+        label,
+        emoji:document.querySelector(`[name="ticket_button_emoji_${i}"]`)?.value.trim() || '🎫',
+        style:document.querySelector(`[name="ticket_button_style_${i}"]`)?.value || 'success',
+        category_id:document.querySelector(`[name="ticket_button_category_${i}"]`)?.value || '',
+        support_role_id:document.querySelector(`[name="ticket_button_role_${i}"]`)?.value || '',
+        title:document.querySelector(`[name="ticket_button_title_${i}"]`)?.value.trim() || '',
+        description:document.querySelector(`[name="ticket_button_description_${i}"]`)?.value.trim() || ''
+      });
+    }
+    for(let i=1;i<=5;i++){
+      delete p[`ticket_button_label_${i}`];
+      delete p[`ticket_button_emoji_${i}`];
+      delete p[`ticket_button_style_${i}`];
+      delete p[`ticket_button_category_${i}`];
+      delete p[`ticket_button_role_${i}`];
+      delete p[`ticket_button_title_${i}`];
+      delete p[`ticket_button_description_${i}`];
+    }
+    p.ticket_buttons=buttons;
+  }
+  if(document.querySelector('[name="level_reward_1"]')){
+    const rewards={};
+    for(let i=1;i<=20;i++){
+      const value=document.querySelector(`[name="level_reward_${i}"]`)?.value || '';
+      if(value) rewards[String(i)]=value;
+      delete p[`level_reward_${i}`];
+    }
+    p.level_rewards=rewards;
+  }
+  return p;
 }
 
 if(form){
@@ -37,6 +77,7 @@ if(form){
     new FormData(form).forEach((v,k)=>p[k]=v);
     form.querySelectorAll('input[type=checkbox]').forEach(x=>p[x.name]=x.checked);
     ['xp_min','xp_max','level_cooldown'].forEach(k=>{if(p[k]!==undefined&&p[k]!=='')p[k]=Number(p[k]);});
+    buildSpecialPayload(p);
     try{
       const d=await save(p);
       if(d.ok){
