@@ -193,6 +193,46 @@ class NewCommands(commands.Cog):
     async def creator(self, ctx):
         await ctx.reply(f'👨‍💻 صانع البوت: <@{CREATOR_ID}>')
 
+    @commands.command(name='اعطاء_رتبة')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
+    async def give_role(self, ctx, member: discord.Member, role: discord.Role):
+        if role.is_default() or role.managed:
+            return await ctx.reply('❌ لا يمكن إعطاء هذه الرتبة.')
+        if role >= ctx.guild.me.top_role:
+            return await ctx.reply('❌ رتبة البوت أقل من الرتبة المطلوبة. ارفع رتبة البوت فوقها.')
+        if role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+            return await ctx.reply('❌ لا يمكنك إعطاء رتبة أعلى من أو مساوية لرتبتك.')
+        if role in member.roles:
+            return await ctx.reply(f'ℹ️ {member.mention} لديه هذه الرتبة بالفعل.')
+        try:
+            await member.add_roles(role, reason=f'إعطاء رتبة بواسطة {ctx.author}')
+        except discord.Forbidden:
+            return await ctx.reply('❌ لا أملك صلاحية إعطاء هذه الرتبة.')
+        log_activity(ctx.guild.id, 'give_role', f'{member} -> {role}', ctx.author.id)
+        await ctx.reply(f'✅ تم إعطاء {member.mention} الرتبة {role.mention}.')
+
+    @commands.command(name='سحب_رتبة')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
+    async def remove_role(self, ctx, member: discord.Member, role: discord.Role):
+        if role.is_default() or role.managed:
+            return await ctx.reply('❌ لا يمكن سحب هذه الرتبة.')
+        if role >= ctx.guild.me.top_role:
+            return await ctx.reply('❌ رتبة البوت أقل من الرتبة المطلوبة.')
+        if role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+            return await ctx.reply('❌ لا يمكنك سحب رتبة أعلى من أو مساوية لرتبتك.')
+        if role not in member.roles:
+            return await ctx.reply(f'ℹ️ {member.mention} لا يملك هذه الرتبة.')
+        try:
+            await member.remove_roles(role, reason=f'سحب رتبة بواسطة {ctx.author}')
+        except discord.Forbidden:
+            return await ctx.reply('❌ لا أملك صلاحية سحب هذه الرتبة.')
+        log_activity(ctx.guild.id, 'remove_role', f'{member} <- {role}', ctx.author.id)
+        await ctx.reply(f'✅ تم سحب الرتبة {role.mention} من {member.mention}.')
+
     @commands.command(name='ريست لفل')
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
