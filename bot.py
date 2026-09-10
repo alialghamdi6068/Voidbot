@@ -100,12 +100,15 @@ async def load_cogs():
     cog_names = [
         'moderation', 'tickets', 'applications', 'levels', 'welcome', 'logs',
         'giveaways', 'suggestions', 'afk', 'autoreply', 'autorole',
-        'announcements', 'reminders', 'scheduler', 'utility', 'owner',
-        'messaging', 'dashboard_commands', 'extra_commands', 'new_commands',
-        'warn_slash', 'multiword'
+        'announcements', 'reminders', 'scheduler', 'utility', 'dashboard_commands',
+        'extra_commands', 'new_commands', 'warn_slash', 'multiword'
     ]
     for name in cog_names:
         try:
+            # extra_commands provides the preferred avatar slash command.
+            # Remove any older avatar registration first to avoid a duplicate.
+            if name == 'extra_commands':
+                bot.tree.remove_command('avatar')
             await bot.load_extension(f'cogs.{name}')
             print(f'[{BOT_NAME}] Loaded cogs.{name}')
         except commands.ExtensionNotFound:
