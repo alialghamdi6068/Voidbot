@@ -5,6 +5,7 @@ from web.dashboard import logged_in, can_manage_guild
 ALLOWED_SETTINGS = {
     'welcome_channel_id', 'welcome_message', 'auto_role_id', 'log_channel_id',
     'ticket_category_id', 'ticket_panel_channel_id', 'ticket_log_channel_id', 'ticket_support_role_id',
+    'ticket_panel_title', 'ticket_panel_description', 'ticket_panel_footer',
     'applications_channel_id', 'applications_log_channel_id',
     'suggestions_channel_id', 'suggestions_log_channel_id',
     'level_channel_id', 'level_announce', 'levels_enabled', 'xp_min', 'xp_max', 'level_cooldown',
@@ -40,6 +41,56 @@ def _get_bot_guild(bot, guild_id):
     return None
 
 
+def _build_ticket_buttons(payload):
+    buttons = []
+    for i in range(1, 6):
+        label = str(payload.get(f'ticket_button_label_{i}', '')).strip()[:80]
+        if not label:
+            continue
+        emoji = str(payload.get(f'ticket_button_emoji_{i}', '🎫')).strip()[:20] or '🎫'
+        style = str(payload.get(f'ticket_button_style_{i}', 'success'))
+        if style not in {'primary', 'secondary', 'success', 'danger'}:
+            style = 'success'
+        button = {
+            'label': label,
+            'emoji': emoji,
+            'style': style,
+        }
+        category_id = payload.get(f'ticket_button_category_{i}')
+        role_id = payload.get(f'ticket_button_role_{i}')
+        title = str(payload.get(f'ticket_button_title_{i}', '')).strip()[:256]
+        description = str(payload.get(f'ticket_button_description_{i}', '')).strip()[:4000]
+        if category_id:
+            try:
+                button['category_id'] = int(category_id)
+            except (TypeError, ValueError):
+                pass
+        if role_id:
+            try:
+                button['support_role_id'] = int(role_id)
+            except (TypeError, ValueError):
+                pass
+        if title:
+            button['title'] = title
+        if description:
+            button['description'] = description
+        buttons.append(button)
+    return buttons
+
+
+def _build_level_rewards(payload):
+    rewards = {}
+    for level in range(1, 21):
+        value = payload.get(f'level_reward_{level}')
+        if not value:
+            continue
+        try:
+            rewards[str(level)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return rewards
+
+
 def register_api(app, bot):
     @app.post('/api/guild/<int:guild_id>/settings')
     @logged_in
@@ -69,6 +120,12 @@ def register_api(app, bot):
                 replies.pop(trigger, None)
             data['autoreplies'] = replies
 
+        if any(key.startswith('ticket_button_') for key in payload):
+            data['ticket_buttons'] = _build_ticket_buttons(payload)
+
+        if any(key.startswith('level_reward_') for key in payload):
+            data['level_rewards'] = _build_level_rewards(payload)
+
         for key in ALLOWED_SETTINGS:
             if key not in payload:
                 continue
@@ -83,8 +140,16 @@ def register_api(app, bot):
                         return jsonify({'ok': False, 'error': f'القيمة غير صحيحة: {key}'}), 400
             elif key in BOOLEAN_SETTINGS:
                 value = bool(value)
-            elif key == 'welcome_message':
-                value = str(value)[:2000]
+            elif key in {'welcome_message', 'ticket_panel_title', 'ticket_panel_description', 'ticket_panel_footer'}:
+                value = str(value)
+                if key == 'welcome_message':
+                    value = value[:2000]
+                elif key == 'ticket_panel_title':
+                    value = value[:256]
+                elif key == 'ticket_panel_description':
+                    value = value[:4000]
+                else:
+                    value = value[:200]
             data[key] = value
 
         update_guild_data(guild_id, **data)
