@@ -93,6 +93,17 @@ class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def replace_variables(self, text, guild, user, ticket_id, category=None, support_role=None):
+        return (
+            str(text)
+            .replace('{member}', user.mention)
+            .replace('{username}', user.display_name)
+            .replace('{server}', guild.name)
+            .replace('{ticket}', f'#{ticket_id:04d}')
+            .replace('{category}', category.name if isinstance(category, discord.CategoryChannel) else 'بدون قسم')
+            .replace('{support}', support_role.mention if support_role else 'فريق الدعم')
+        )
+
     def ticket_overwrites(self, guild, user, support_role_id=None):
         settings = get_guild_data(guild.id)
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)}
@@ -127,6 +138,7 @@ class Tickets(commands.Cog):
         support_role_id = button_config.get('support_role_id') or settings.get('ticket_support_role_id')
         category = guild.get_channel(int(category_id)) if category_id else None
         category = category if isinstance(category, discord.CategoryChannel) else None
+        support_role = guild.get_role(int(support_role_id)) if support_role_id else None
         existing = discord.utils.find(lambda c: c.topic == f'flame-ticket-user:{user.id}', guild.text_channels)
         if existing:
             return await interaction.response.send_message(f'❌ عندك تذكرة مفتوحة بالفعل: {existing.mention}', ephemeral=True)
@@ -151,6 +163,8 @@ class Tickets(commands.Cog):
         await self.write_ticket_log(guild, f'🎫 تم فتح `{channel.name}` بواسطة {user.mention}.')
         title = str(button_config.get('title') or settings.get('ticket_embed_title') or f'🎫 تذكرة دعم #{ticket_id:04d}')[:256]
         description = str(button_config.get('description') or settings.get('ticket_embed_description') or 'أهلاً بك!\n\nاكتب تفاصيل طلبك هنا وسيقوم فريق الدعم بمساعدتك.')[:4000]
+        title = self.replace_variables(title, guild, user, ticket_id, category, support_role)[:256]
+        description = self.replace_variables(description, guild, user, ticket_id, category, support_role)[:4000]
         embed = discord.Embed(title=title, description=description, color=discord.Color.blurple())
         await channel.send(content=user.mention, embed=embed, view=TicketView(self))
         await interaction.response.send_message(f'✅ تم فتح تذكرتك: {channel.mention}', ephemeral=True)
