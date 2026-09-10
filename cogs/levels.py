@@ -10,6 +10,19 @@ class Levels(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def apply_level_reward(self, guild, member, level, settings):
+        rewards = settings.get('level_rewards') or {}
+        role_id = rewards.get(str(level))
+        if not role_id:
+            return
+        try:
+            role = guild.get_role(int(role_id))
+            if role and role not in member.roles and guild.me and guild.me.guild_permissions.manage_roles and role < guild.me.top_role:
+                await member.add_roles(role, reason=f'Level {level} reward')
+                log_activity(guild.id, 'level_role_reward', f'{member} -> {role.name} at level {level}', member.id)
+        except (ValueError, discord.HTTPException, discord.Forbidden):
+            pass
+
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.guild or message.author.bot:
@@ -30,10 +43,17 @@ class Levels(commands.Cog):
             new_level = int(xp ** 0.5)
             conn.execute('INSERT INTO levels(guild_id,user_id,xp,level,last_message) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET xp=excluded.xp,level=excluded.level,last_message=excluded.last_message', (message.guild.id, message.author.id, xp, new_level, now))
         if new_level > level:
+            await self.apply_level_reward(message.guild, message.author, new_level, settings)
             channel_id = settings.get('level_channel_id')
             channel = message.guild.get_channel(int(channel_id)) if channel_id else None
             if isinstance(channel, discord.TextChannel) and settings.get('level_announce', True):
-                await channel.send(f'🎉 {message.author.mention} وصل للمستوى **{new_level}**!')
+                reward_text = ''
+                role_id = (settings.get('level_rewards') or {}).get(str(new_level))
+                if role_id:
+                    role = message.guild.get_role(int(role_id))
+                    if role:
+                        reward_text = f'\n🏷️ الرتبة: {role.mention}'
+                await channel.send(f'🎉 {message.author.mention} وصل للمستوى **{new_level}**!{reward_text}')
             log_activity(message.guild.id, 'level_up', f'{message.author} -> {new_level}', message.author.id)
 
     @commands.command(name='لفل')
