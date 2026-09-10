@@ -8,15 +8,16 @@ from flask import abort, request, session
 
 _RATE_BUCKETS = defaultdict(deque)
 _RATE_LIMITS = {
-    'login': (10, 60),
-    'callback': (10, 60),
+    'login': (8, 60),
+    'callback': (8, 60),
     'api': (30, 60),
+    'logout': (10, 60),
+    'health': (30, 60),
 }
+_MAX_RATE_BUCKETS = 10000
 
 
 def client_ip():
-    # Do not trust arbitrary forwarded headers. ProxyFix in app.py makes
-    # request.remote_addr the trusted proxy-derived client address.
     return request.remote_addr or 'unknown'
 
 
@@ -30,6 +31,11 @@ def rate_limit(bucket):
     if len(events) >= limit:
         abort(429, description='تم تجاوز عدد المحاولات المسموح بها. حاول لاحقًا.')
     events.append(now)
+    if len(_RATE_BUCKETS) > _MAX_RATE_BUCKETS:
+        stale_before = now - 60
+        stale = [k for k, q in _RATE_BUCKETS.items() if not q or q[-1] < stale_before]
+        for old_key in stale[:2000]:
+            _RATE_BUCKETS.pop(old_key, None)
 
 
 def csrf_token():
@@ -42,15 +48,26 @@ def csrf_token():
 
 def validate_csrf():
     expected = session.get('csrf_token')
-    supplied = request.headers.get('X-CSRF-Token', '')
+    supplied = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token', '')
     if not expected or not supplied or not secrets.compare_digest(str(supplied), str(expected)):
         abort(403, description='طلب غير صالح.')
+
+
+def validate_same_origin():
+    origin = request.headers.get('Origin')
+    referer = request.headers.get('Referer')
+    host = request.host_url.rstrip('/')
+    if origin and origin.rstrip('/') != host:
+        abort(403, description='مصدر الطلب غير مسموح.')
+    if not origin and referer and not referer.startswith(host + '/'):
+        abort(403, description='مصدر الطلب غير مسموح.')
 
 
 def protected_post(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         rate_limit('api')
+        validate_same_origin()
         validate_csrf()
         return fn(*args, **kwargs)
     return wrapper
