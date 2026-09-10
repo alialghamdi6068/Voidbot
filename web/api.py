@@ -41,53 +41,47 @@ def _get_bot_guild(bot, guild_id):
     return None
 
 
-def _build_ticket_buttons(payload):
-    buttons = []
-    for i in range(1, 6):
-        label = str(payload.get(f'ticket_button_label_{i}', '')).strip()[:80]
+def _clean_ticket_buttons(value):
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[:5]:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get('label', '')).strip()[:80]
         if not label:
             continue
-        emoji = str(payload.get(f'ticket_button_emoji_{i}', '🎫')).strip()[:20] or '🎫'
-        style = str(payload.get(f'ticket_button_style_{i}', 'success'))
-        if style not in {'primary', 'secondary', 'success', 'danger'}:
-            style = 'success'
         button = {
             'label': label,
-            'emoji': emoji,
-            'style': style,
+            'emoji': str(item.get('emoji') or '🎫').strip()[:20] or '🎫',
+            'style': item.get('style') if item.get('style') in {'primary', 'secondary', 'success', 'danger'} else 'success'
         }
-        category_id = payload.get(f'ticket_button_category_{i}')
-        role_id = payload.get(f'ticket_button_role_{i}')
-        title = str(payload.get(f'ticket_button_title_{i}', '')).strip()[:256]
-        description = str(payload.get(f'ticket_button_description_{i}', '')).strip()[:4000]
-        if category_id:
-            try:
-                button['category_id'] = int(category_id)
-            except (TypeError, ValueError):
-                pass
-        if role_id:
-            try:
-                button['support_role_id'] = int(role_id)
-            except (TypeError, ValueError):
-                pass
-        if title:
-            button['title'] = title
-        if description:
-            button['description'] = description
-        buttons.append(button)
-    return buttons
+        for key in ('category_id', 'support_role_id'):
+            if item.get(key):
+                try:
+                    button[key] = int(item[key])
+                except (TypeError, ValueError):
+                    pass
+        if item.get('title'):
+            button['title'] = str(item['title'])[:256]
+        if item.get('description'):
+            button['description'] = str(item['description'])[:4000]
+        result.append(button)
+    return result
 
 
-def _build_level_rewards(payload):
+def _clean_level_rewards(value):
+    if not isinstance(value, dict):
+        return {}
     rewards = {}
-    for level in range(1, 21):
-        value = payload.get(f'level_reward_{level}')
-        if not value:
-            continue
+    for level, role_id in value.items():
         try:
-            rewards[str(level)] = int(value)
+            level_int = int(level)
+            role_int = int(role_id)
         except (TypeError, ValueError):
             continue
+        if 1 <= level_int <= 100 and role_int > 0:
+            rewards[str(level_int)] = role_int
     return rewards
 
 
@@ -120,11 +114,11 @@ def register_api(app, bot):
                 replies.pop(trigger, None)
             data['autoreplies'] = replies
 
-        if any(key.startswith('ticket_button_') for key in payload):
-            data['ticket_buttons'] = _build_ticket_buttons(payload)
+        if 'ticket_buttons' in payload:
+            data['ticket_buttons'] = _clean_ticket_buttons(payload.get('ticket_buttons'))
 
-        if any(key.startswith('level_reward_') for key in payload):
-            data['level_rewards'] = _build_level_rewards(payload)
+        if 'level_rewards' in payload:
+            data['level_rewards'] = _clean_level_rewards(payload.get('level_rewards'))
 
         for key in ALLOWED_SETTINGS:
             if key not in payload:
@@ -142,14 +136,13 @@ def register_api(app, bot):
                 value = bool(value)
             elif key in {'welcome_message', 'ticket_panel_title', 'ticket_panel_description', 'ticket_panel_footer'}:
                 value = str(value)
-                if key == 'welcome_message':
-                    value = value[:2000]
-                elif key == 'ticket_panel_title':
-                    value = value[:256]
-                elif key == 'ticket_panel_description':
-                    value = value[:4000]
-                else:
-                    value = value[:200]
+                limits = {
+                    'welcome_message': 2000,
+                    'ticket_panel_title': 256,
+                    'ticket_panel_description': 4000,
+                    'ticket_panel_footer': 200,
+                }
+                value = value[:limits[key]]
             data[key] = value
 
         update_guild_data(guild_id, **data)
