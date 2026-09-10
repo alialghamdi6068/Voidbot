@@ -3,6 +3,7 @@ import time
 import requests
 from flask import redirect, request, session, url_for, render_template
 from config import DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI
+from web.security import rate_limit, csrf_token, validate_csrf
 
 DISCORD_API = 'https://discord.com/api/v10'
 
@@ -25,8 +26,6 @@ def _managed_guilds_from_token(token):
                 permissions = int(guild.get('permissions_new', guild.get('permissions', 0)))
             except (TypeError, ValueError):
                 permissions = 0
-
-            # MANAGE_GUILD = 0x20, ADMINISTRATOR = 0x8.
             if guild.get('owner') is True or permissions & 0x20 or permissions & 0x8:
                 try:
                     allowed.add(int(guild['id']))
@@ -40,18 +39,14 @@ def _managed_guilds_from_token(token):
 def register_auth(app, bot):
     @app.get('/login')
     def login():
-        # OAuth2 is configured once by the site owner in the hosting environment.
-        # Never expose hosting setup instructions to normal website visitors.
+        rate_limit('login')
         if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET or not DISCORD_REDIRECT_URI:
-            return render_template(
-                'error.html',
-                title='تعذر تسجيل الدخول',
-                message='تسجيل الدخول غير متاح حاليًا. يرجى المحاولة لاحقًا.'
-            ), 503
+            return render_template('error.html', title='تعذر تسجيل الدخول', message='تسجيل الدخول غير متاح حاليًا. يرجى المحاولة لاحقًا.'), 503
 
         state = secrets.token_urlsafe(32)
         session.clear()
         session['oauth_state'] = state
+        csrf_token()
         params = {
             'client_id': DISCORD_CLIENT_ID,
             'redirect_uri': DISCORD_REDIRECT_URI,
@@ -64,6 +59,7 @@ def register_auth(app, bot):
 
     @app.get('/callback')
     def callback():
+        rate_limit('callback')
         state = request.args.get('state')
         expected = session.get('oauth_state')
         if not state or not expected or state != expected:
@@ -104,7 +100,6 @@ def register_auth(app, bot):
 
             guilds = _managed_guilds_from_token(access_token)
             user = user_response.json()
-
             session.clear()
             session['oauth'] = {
                 'access_token': access_token,
@@ -117,16 +112,16 @@ def register_auth(app, bot):
                 'global_name': user.get('global_name'),
                 'avatar': user.get('avatar'),
             }
-            # Keep the exact managed-server set from the successful OAuth login.
-            # This avoids a second Discord API call failing during a save request.
             session['managed_guild_ids'] = sorted(guilds)
+            csrf_token()
             return redirect(url_for('servers'))
         except (requests.RequestException, ValueError, TypeError):
             session.clear()
             return render_template('error.html', title='فشل الاتصال', message='تعذر الاتصال بخوادم Discord. حاول مرة أخرى.'), 502
 
-    @app.get('/logout')
+    @app.post('/logout')
     def logout():
+        validate_csrf()
         session.clear()
         return redirect(url_for('home'))
 
@@ -136,7 +131,6 @@ def discord_token():
 
 
 def managed_guild_ids():
-    # Prefer the signed session cache created immediately after OAuth login.
     cached = session.get('managed_guild_ids')
     if isinstance(cached, list):
         result = set()
@@ -146,5 +140,4 @@ def managed_guild_ids():
             except (TypeError, ValueError):
                 continue
         return result
-
     return _managed_guilds_from_token(discord_token())
