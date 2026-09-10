@@ -32,7 +32,6 @@
       {% for i in range(5) %}{% set b = ticket_buttons[i] if i < ticket_buttons|length else {} %}
       <div class="panel" style="margin-top:12px"><h3>الزر {{i+1}}</h3><div class="form-grid">
         <label>اسم الزر<input name="ticket_button_label_{{i+1}}" value="{{b.get('label','')}}" placeholder="مثال: الدعم"></label>
-        <label>الإيموجي<input name="ticket_button_emoji_{{i+1}}" value="{{b.get('emoji','🎫')}}" placeholder="🎫"></label>
         <label>لون الزر<select name="ticket_button_style_{{i+1}}"><option value="success" {% if b.get('style','success')=='success' %}selected{% endif %}>أخضر</option><option value="primary" {% if b.get('style')=='primary' %}selected{% endif %}>أزرق</option><option value="secondary" {% if b.get('style')=='secondary' %}selected{% endif %}>رمادي</option><option value="danger" {% if b.get('style')=='danger' %}selected{% endif %}>أحمر</option></select></label>
         <label>القسم<select name="ticket_button_category_{{i+1}}"><option value="">الافتراضي</option>{% for c in categories %}<option value="{{c.id}}" {% if b.get('category_id')|string == c.id|string %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label>
         <label>رتبة الدعم<select name="ticket_button_role_{{i+1}}"><option value="">الافتراضية</option>{% for r in roles|sort(attribute='position', reverse=true) %}{% if not r.is_default() %}<option value="{{r.id}}" {% if b.get('support_role_id')|string == r.id|string %}selected{% endif %}>@{{r.name}}</option>{% endif %}{% endfor %}</select></label>
