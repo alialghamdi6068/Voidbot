@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, session
+from flask import Flask, Response, render_template, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import SESSION_SECRET
 from web.security import csrf_token, rate_limit
@@ -63,6 +63,31 @@ def create_app(bot):
     @app.get('/health')
     def health():
         return {'status': 'ok', 'bot_ready': bot.is_ready()}
+
+    @app.get('/robots.txt')
+    def robots():
+        return Response(
+            'User-agent: *\n'
+            'Allow: /\n'
+            'Disallow: /dashboard/\n'
+            'Disallow: /api/\n'
+            'Disallow: /login\n'
+            'Disallow: /callback\n'
+            'Disallow: /logout\n'
+            'Sitemap: /sitemap.xml\n',
+            mimetype='text/plain',
+        )
+
+    @app.get('/sitemap.xml')
+    def sitemap():
+        root = request.url_root.rstrip('/')
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f'<url><loc>{root}/</loc></url>'
+            '</urlset>'
+        )
+        return Response(xml, mimetype='application/xml')
 
     @app.errorhandler(403)
     def forbidden(error):
